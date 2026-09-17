@@ -12,6 +12,7 @@ import {
 import {
   EmptyState,
   ErrorState,
+  LoadMoreError,
   SkeletonGrid,
 } from "@/features/assets/GridStates";
 import { useAssets } from "@/features/assets/useAssets";
@@ -31,15 +32,26 @@ export function App() {
 
   // Search once typing pauses, not on every keystroke.
   const debouncedQ = useDebouncedValue(filters.q, 400);
-  const { items, total, hasData, isUpdating, isFetching, error, retry } =
-    useAssets({
-      q: debouncedQ,
-      status: filters.status,
-      kind: filters.kind,
-      tag: filters.tag,
-      sort: filters.sort,
-      limit: 24,
-    });
+  const {
+    items,
+    total,
+    hasMore,
+    searchKey,
+    hasData,
+    isUpdating,
+    isFetching,
+    error,
+    retry,
+    loadMore,
+    loadMoreError,
+    retryLoadMore,
+  } = useAssets({
+    q: debouncedQ,
+    status: filters.status,
+    kind: filters.kind,
+    tag: filters.tag,
+    sort: filters.sort,
+  });
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -128,7 +140,7 @@ export function App() {
         ))}
         {hasData && (
           <span className="muted">
-            {items.length} of {total.toLocaleString()} shown
+            {items.length.toLocaleString()} of {total.toLocaleString()} loaded
           </span>
         )}
       </div>
@@ -168,12 +180,20 @@ export function App() {
             />
           ) : (
             <AssetGrid
+              // A new search starts a fresh grid, scrolled to the top.
+              key={searchKey}
               assets={items}
+              hasMore={hasMore}
               selectedIds={selectedIds}
               activeId={activeId}
               onToggleSelect={toggleSelect}
               onOpen={setActiveId}
+              onNearEnd={loadMore}
             />
+          )}
+
+          {loadMoreError && (
+            <LoadMoreError message={loadMoreError} onRetry={retryLoadMore} />
           )}
         </div>
         {activeId && (

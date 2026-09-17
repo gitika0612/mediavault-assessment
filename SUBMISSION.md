@@ -29,10 +29,10 @@ Roughly, and how you split it.
 | 1   | An older search result can replace a newer one                      | `useAssets.ts:26–45`                               | Fixed (Task 1)              |
 | 2   | One request per keystroke                                           | `App.tsx:64`, `useAssets.ts:45`                    | Fixed (Task 1)              |
 | 3   | Filters and search are lost on reload and can't be shared           | `App.tsx`                                          | Fixed (Task 1)              |
-| 4   | Only the first 24 assets can ever be shown                          | `useAssets.ts:33`, `App.tsx:26`                    | Planned (Task 2)            |
+| 4   | Only the first 24 assets can ever be shown                          | `useAssets.ts:33`, `App.tsx:26`                    | Fixed (Task 2)              |
 | 5   | Loading, empty and error look the same, and errors keep old results | `AssetGrid.tsx:18–25`, `useAssets.ts:19`, `:39–43` | Fixed (Task 1)              |
-| 6   | Every loaded card is put into the page                              | `AssetGrid.tsx:29–55`                              | Planned (Task 2)            |
-| 7   | Cards collapse into thin lines once many rows load                  | `styles.css`                                       | Fixed (Task 1), re-check in Task 2 |
+| 6   | Every loaded card is put into the page                              | `AssetGrid.tsx:29–55`                              | Fixed (Task 2)              |
+| 7   | Cards collapse into thin lines once many rows load                  | `styles.css`                                       | Fixed (Task 1)              |
 | 8   | Ticking one checkbox redraws every card                             | `App.tsx`, `AssetGrid.tsx`                         | Planned (Task 2)            |
 | 9   | Thumbnails ignore `hasThumbnail` and all load at once               | `AssetGrid.tsx`                                    | Planned (Task 2)            |
 | 10  | Bulk update fails completely above 50 items                         | `App.tsx`                                          | Planned (Task 3)            |
@@ -69,7 +69,7 @@ Roughly, and how you split it.
 - **Where:** `useAssets.ts:33` (nextCursor stored, never read); `App.tsx:26` (limit: 24)
 - **Problem:** The server returns a cursor for the next page, but the app never uses it.
 - **Seen:** the count always says "24 of 12,400 shown" and scrolling loads nothing more.
-- **Status:** planned (Task 2)
+- **Status:** fixed (Task 2). useInfiniteQuery with cursor pagination, 50 per page, next page loads near the bottom, duplicates dropped, a failed page shows "Couldn't load more · Try again" and keeps the loaded cards.
 
 **5. Loading, empty and error look the same, and errors keep old results**
 
@@ -83,13 +83,13 @@ Roughly, and how you split it.
 - **Where:** `AssetGrid.tsx:29–55`
 - **Problem:** Every asset becomes DOM elements, including cards far off screen, so the page grows with the list. It's hidden today only because defect 4 limits the list to 24.
 - **Seen:** with 24 cards temporarily repeated to 5,000, the page had 35,041 elements (199 at 24 cards).
-- **Status:** planned (Task 2)
+- **Status:** fixed (Task 2). rows virtualized with TanStack Virtual; only rows near the screen are rendered.
 
 **7. Cards collapse into thin lines once many rows load**
 
 - **Where:** `styles.css` - `.grid` (fixed height) and `.card` (overflow: hidden)
 - **Seen:** with 5,000 cards every card became a thin line
-- **Status:** fixed (Task 1). `grid-auto-rows: max-content` on `.grid`, so rows size to their cards instead of shrinking to fit the grid's height. Checked with 24 cards in a narrow window; to re-check with 5,000+ rows in Task 2.
+- **Status:** fixed (Task 1). `grid-auto-rows: max-content` on `.grid`, so rows size to their cards instead of shrinking to fit the grid's height. virtualized rows now have a fixed calculated height, so cards can't collapse; checked at 2,000 rows.
 
 **8. Ticking one checkbox redraws every card**
 
@@ -148,7 +148,7 @@ six of these is about right.
 
 **Data fetching and caching**
 
-- Replaced the `useState` + `useEffect` loader with React Query (`useQuery`).
+- Replaced the `useState` + `useEffect` loader with React Query. Task 1 used `useQuery`; Task 2 switched to `useInfiniteQuery`, so each search keeps its own list of pages and cursors.
 - It gives a cache per search, request cancellation and de-duplication, which the brief asks for, so I didn't have to build and test them myself.
 - React Query's automatic retry is off. Retries come in Task 4, where I can choose which errors are safe to retry.
 
@@ -158,8 +158,17 @@ six of these is about right.
 - Superseded requests are cancelled, not just ignored: I pass React Query's `signal` to `fetch`.
 - Before building the key, I trim the text and sort the status/kind/tag lists, so "Draft + Approved" and "Approved + Draft" are the same search and send one request.
 - Search is debounced by 400 ms: it runs when typing pauses, not on every letter. Filter and sort clicks apply immediately. 400 ms waits for a real pause at a normal typing pace but still feels instant.
+- Pagination can't reuse an old cursor: loading more is blocked while the previous search's cards are still on screen, so an old cursor is never sent with new filters and the user never sees `stale_cursor`. Checked by changing a filter mid-scroll: the first request had no cursor and nothing returned 400.
 
 **Virtualization approach**
+
+- TanStack Virtual renders only the rows near the screen (plus 2 above and below); the rest is empty space of the right height. Checked: 54 cards / 429 DOM nodes at 1,000, 1,500 and 2,000 assets loaded.
+- Columns come from the grid's width (a `ResizeObserver`), using the same 220px minimum as the CSS.
+- Row height is calculated, not measured: 16:10 thumbnail + 104px card body + 12px gap. Every row is the same height, so nothing jumps while scrolling. Cost: card names and details are one line with "…".
+- No layout shift as pages load: while more pages exist, one row of placeholder cards is reserved at the bottom and the next page fills it.
+- A new search remounts the grid, so it starts at the top.
+- Rejected: hand-written virtualization. Possible, but more scroll maths to own and test; the library costs +8 kB gzipped.
+- Rejected: measuring each row's real height. Simpler to write, but rows and the scrollbar shift as heights are measured.
 
 **Optimistic updates and rollback**
 
@@ -183,7 +192,7 @@ Fill in real measurements, not estimates. Say which machine and browser.
 
 | Metric                                          | Before                | After | How measured                                                                   |
 | ----------------------------------------------- | --------------------- | ----- | ------------------------------------------------------------------------------ |
-| Rendered DOM nodes at 5,000 rows loaded         |                       |       |                                                                                |
+| Rendered DOM nodes at 5,000 rows loaded         | 35,041 | 259 (top) / 345 (middle) / 388 (bottom) | `document.querySelectorAll('*').length`. Before: the 24 baseline cards temporarily repeated to 5,000 (the baseline can't load more than 24). After: 5,050 real rows loaded by scrolling, full-width window (6 columns), counted at the top, middle and bottom of the list. The count depends on window size, not on how many rows are loaded. |
 | Cards re-rendered when toggling one selection   |                       |       |                                                                                |
 | Longest task during sustained scroll            |                       |       |                                                                                |
 | Requests fired while typing a 6-character query | 6 (one per keystroke) | 1     | Network tab filtered to `api/assets`, cleared, typed "garden" at normal speed. |

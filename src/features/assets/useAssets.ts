@@ -1,6 +1,9 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { listAssets } from "@/api/client";
-import type { AssetQuery } from "@/lib/types";
+import type { Asset, AssetPage, AssetQuery } from "@/lib/types";
+
+const PAGE_SIZE = 50;
 
 function normalize(query: AssetQuery): AssetQuery {
   return {
@@ -12,26 +15,80 @@ function normalize(query: AssetQuery): AssetQuery {
   };
 }
 
+// Join all pages into one list. An asset can appear twice if a change moved it
+// between pages we've already loaded, so keep only the first copy.
+function joinPages(pages: AssetPage[]): Asset[] {
+  const seen = new Set<string>();
+  const items: Asset[] = [];
+  for (const page of pages) {
+    for (const asset of page.items) {
+      if (!seen.has(asset.id)) {
+        seen.add(asset.id);
+        items.push(asset);
+      }
+    }
+  }
+  return items;
+}
+
 export function useAssets(query: AssetQuery) {
   const params = normalize(query);
 
-  const result = useQuery({
-    // Each response is stored under the search it was for, so an old one can't show up under a new search. (fix 1)
+  const result = useInfiniteQuery({
+    // Each search has its own cache entry, so its cursors can never be used for another search.
     queryKey: ["assets", params],
-    queryFn: ({ signal }) => listAssets(params, signal),
+    // "" means the first page.
+    initialPageParam: "",
+    queryFn: ({ signal, pageParam }) =>
+      listAssets(
+        { ...params, limit: PAGE_SIZE, cursor: pageParam || undefined },
+        signal
+      ),
+    // No cursor means we've reached the end.
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     // Keep showing the last results while the next search loads, instead of flashing empty.
     placeholderData: keepPreviousData,
+    // Don't refetch a loaded list on its own: that would reload every page at once.
+    staleTime: Infinity,
   });
 
+  const pages = result.data?.pages;
+  const items = useMemo(() => (pages ? joinPages(pages) : []), [pages]);
+
+  function loadMore() {
+    // One page at a time. Never while the previous search's cards are showing:
+    // their cursor belongs to that search and the server would reject it.
+    if (!result.hasNextPage || result.isFetching || result.isPlaceholderData)
+      return;
+    // After a failed page, wait for the user to press Try again.
+    if (result.isFetchNextPageError) return;
+    // Two scroll events can arrive before the next render. If a page is already
+    // loading, reuse that request instead of cancelling it and sending another.
+    void result.fetchNextPage({ cancelRefetch: false });
+  }
+
+  const loadMoreFailed = result.isFetchNextPageError;
+  // The newest page has the most up-to-date total.
+  const lastPage = pages ? pages[pages.length - 1] : undefined;
+
   return {
-    items: result.data?.items ?? [],
-    total: result.data?.total ?? 0,
+    items,
+    total: lastPage?.total ?? 0,
+    // After a failed page, stop showing placeholder cards: nothing is loading until Try again.
+    hasMore: result.hasNextPage && !loadMoreFailed,
+    // Changes whenever the search changes. Used to start a new search at the top.
+    searchKey: JSON.stringify(params),
     // No results to show yet (first load, or after an error).
-    hasData: result.data !== undefined,
-    // Results are on screen but a newer request is running.
-    isUpdating: result.isFetching && result.data !== undefined,
+    hasData: pages !== undefined,
+    // Results are on screen but a new search is loading (not just the next page).
+    isUpdating:
+      result.isFetching && !result.isFetchingNextPage && pages !== undefined,
     isFetching: result.isFetching,
-    error: result.error ? result.error.message : null,
+    // A failed next page doesn't count here, so it won't replace the cards already loaded.
+    error: result.error && !loadMoreFailed ? result.error.message : null,
     retry: () => void result.refetch(),
+    loadMore,
+    loadMoreError: loadMoreFailed && result.error ? result.error.message : null,
+    retryLoadMore: () => void result.fetchNextPage(),
   };
 }

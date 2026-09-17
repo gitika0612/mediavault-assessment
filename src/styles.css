@@ -142,6 +142,28 @@ button:disabled {
   align-content: start;
 }
 
+/* Virtualized grid: the scroller holds one tall box, and only nearby rows are placed inside it.
+   Padding, gap and card sizes must match the numbers in AssetGrid.tsx. */
+.grid-scroller {
+  flex: 1;
+  overflow: auto;
+  padding: 0 16px;
+}
+.grid-rows {
+  position: relative;
+}
+.grid-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: grid;
+  gap: 12px;
+}
+.grid-row .card {
+  height: 100%;
+}
+
 .card {
   position: relative;
   border: 1px solid var(--line);
@@ -171,6 +193,12 @@ button:disabled {
   margin: 0 0 2px;
   font-weight: 600;
   font-size: 14px;
+}
+/* One line each, so every card body has the same height. */
+.card__body p {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .card__check {
   position: absolute;
@@ -264,7 +292,8 @@ button:disabled {
   min-height: 0;
 }
 
-.results--updating .grid {
+.results--updating .grid,
+.results--updating .grid-scroller {
   opacity: 0.5;
 }
 .results__updating {
@@ -304,6 +333,16 @@ button:disabled {
 }
 .error-text {
   color: var(--danger);
+}
+
+.load-more-error {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  font-size: 13px;
+  border-top: 1px solid var(--line);
 }
 
 @media (max-width: 720px) {
