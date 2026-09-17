@@ -1,29 +1,45 @@
-import { useState } from 'react';
-import { bulkSetStatus } from '@/api/client';
-import { AssetDetail } from '@/features/assets/AssetDetail';
-import { AssetGrid } from '@/features/assets/AssetGrid';
-import { useAssets } from '@/features/assets/useAssets';
-import { statusLabel } from '@/lib/format';
-import type { Asset, AssetStatus, AssetQuery } from '@/lib/types';
+import { useState } from "react";
+import { bulkSetStatus } from "@/api/client";
+import { AssetDetail } from "@/features/assets/AssetDetail";
+import { AssetGrid } from "@/features/assets/AssetGrid";
+import {
+  KINDS,
+  SORTS,
+  STATUSES,
+  useFilters,
+  type Sort,
+} from "@/features/assets/filters";
+import {
+  EmptyState,
+  ErrorState,
+  SkeletonGrid,
+} from "@/features/assets/GridStates";
+import { useAssets } from "@/features/assets/useAssets";
+import { kindLabel, statusLabel } from "@/lib/format";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import type { Asset, AssetStatus } from "@/lib/types";
 
-const STATUSES: AssetStatus[] = ['draft', 'in_review', 'approved', 'archived'];
-const SORTS: Array<{ value: NonNullable<AssetQuery['sort']>; label: string }> = [
-  { value: 'updatedAt:desc', label: 'Recently updated' },
-  { value: 'name:asc', label: 'Name A–Z' },
-  { value: 'sizeBytes:desc', label: 'Largest first' },
-  { value: 'createdAt:desc', label: 'Newest' },
-];
+function toggle<T>(list: T[], value: T, checked: boolean): T[] {
+  return checked ? [...list, value] : list.filter((x) => x !== value);
+}
 
 export function App() {
-  const [q, setQ] = useState('');
-  const [status, setStatus] = useState<AssetStatus[]>([]);
-  const [sort, setSort] = useState<NonNullable<AssetQuery['sort']>>('updatedAt:desc');
+  const [filters, updateFilters] = useFilters();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Every keystroke sends a request. Nothing is debounced or cancelled.
-  const { items, total, loading, error } = useAssets({ q, status, sort, limit: 24 });
+  // Search once typing pauses, not on every keystroke.
+  const debouncedQ = useDebouncedValue(filters.q, 400);
+  const { items, total, hasData, isUpdating, isFetching, error, retry } =
+    useAssets({
+      q: debouncedQ,
+      status: filters.status,
+      kind: filters.kind,
+      tag: filters.tag,
+      sort: filters.sort,
+      limit: 24,
+    });
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -44,7 +60,7 @@ export function App() {
       setNotice(`${result.applied} updated, ${result.failed} failed.`);
       setSelectedIds(new Set());
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : 'Bulk update failed');
+      setNotice(err instanceof Error ? err.message : "Bulk update failed");
     }
   }
 
@@ -60,10 +76,15 @@ export function App() {
           className="search"
           type="search"
           placeholder="Search assets"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
+          value={filters.q}
+          onChange={(e) => updateFilters({ q: e.target.value }, "replace")}
         />
-        <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+        <select
+          value={filters.sort}
+          onChange={(e) =>
+            updateFilters({ sort: e.target.value as Sort }, "push")
+          }
+        >
           {SORTS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -73,23 +94,43 @@ export function App() {
       </header>
 
       <div className="filters">
+        <span className="muted">Status</span>
         {STATUSES.map((s) => (
           <label key={s}>
             <input
               type="checkbox"
-              checked={status.includes(s)}
+              checked={filters.status.includes(s)}
               onChange={(e) =>
-                setStatus((prev) =>
-                  e.target.checked ? [...prev, s] : prev.filter((x) => x !== s),
+                updateFilters(
+                  { status: toggle(filters.status, s, e.target.checked) },
+                  "push"
                 )
               }
             />
             {statusLabel(s)}
           </label>
         ))}
-        <span className="muted">
-          {loading ? 'Loading…' : `${items.length} of ${total.toLocaleString()} shown`}
-        </span>
+        <span className="muted">Kind</span>
+        {KINDS.map((k) => (
+          <label key={k}>
+            <input
+              type="checkbox"
+              checked={filters.kind.includes(k)}
+              onChange={(e) =>
+                updateFilters(
+                  { kind: toggle(filters.kind, k, e.target.checked) },
+                  "push"
+                )
+              }
+            />
+            {kindLabel(k)}
+          </label>
+        ))}
+        {hasData && (
+          <span className="muted">
+            {items.length} of {total.toLocaleString()} shown
+          </span>
+        )}
       </div>
 
       {selectedIds.size > 0 && (
@@ -100,23 +141,47 @@ export function App() {
               Set {statusLabel(s).toLowerCase()}
             </button>
           ))}
-          <button onClick={() => setSelectedIds(new Set())}>Clear selection</button>
+          <button onClick={() => setSelectedIds(new Set())}>
+            Clear selection
+          </button>
         </div>
       )}
 
       {notice && <p className="notice">{notice}</p>}
-      {error && <p className="error">{error}</p>}
 
       <main className="content">
-        <AssetGrid
-          assets={items}
-          selectedIds={selectedIds}
-          activeId={activeId}
-          onToggleSelect={toggleSelect}
-          onOpen={setActiveId}
-        />
+        <div
+          className={isUpdating ? "results results--updating" : "results"}
+          aria-busy={isFetching}
+        >
+          {isUpdating && <p className="results__updating">Updating results…</p>}
+
+          {error && !isFetching ? (
+            <ErrorState message={error} onRetry={retry} />
+          ) : !hasData ? (
+            <SkeletonGrid />
+          ) : items.length === 0 ? (
+            <EmptyState
+              onClear={() =>
+                updateFilters({ q: "", status: [], kind: [], tag: [] }, "push")
+              }
+            />
+          ) : (
+            <AssetGrid
+              assets={items}
+              selectedIds={selectedIds}
+              activeId={activeId}
+              onToggleSelect={toggleSelect}
+              onOpen={setActiveId}
+            />
+          )}
+        </div>
         {activeId && (
-          <AssetDetail id={activeId} onClose={() => setActiveId(null)} onSaved={handleSaved} />
+          <AssetDetail
+            id={activeId}
+            onClose={() => setActiveId(null)}
+            onSaved={handleSaved}
+          />
         )}
       </main>
     </div>

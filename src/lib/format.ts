@@ -1,4 +1,4 @@
-import type { AssetStatus } from './types';
+import type { AssetKind, AssetStatus } from './types';
 
 const UNITS = ['B', 'KB', 'MB', 'GB'];
 
@@ -37,4 +37,14 @@ const STATUS_LABELS: Record<AssetStatus, string> = {
 
 export function statusLabel(status: AssetStatus): string {
   return STATUS_LABELS[status];
+}
+
+const KIND_LABELS: Record<AssetKind, string> = {
+  image: 'Image',
+  video: 'Video',
+  document: 'Document',
+};
+
+export function kindLabel(kind: AssetKind): string {
+  return KIND_LABELS[kind];
 }

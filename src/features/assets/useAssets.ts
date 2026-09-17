@@ -1,48 +1,37 @@
-import { useEffect, useState } from 'react';
-import { listAssets } from '@/api/client';
-import type { Asset, AssetQuery } from '@/lib/types';
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { listAssets } from "@/api/client";
+import type { AssetQuery } from "@/lib/types";
 
-interface State {
-  items: Asset[];
-  total: number;
-  nextCursor: string | null;
-  loading: boolean;
-  error: string | null;
+function normalize(query: AssetQuery): AssetQuery {
+  return {
+    ...query,
+    q: query.q?.trim() || undefined,
+    status: query.status?.length ? [...query.status].sort() : undefined,
+    kind: query.kind?.length ? [...query.kind].sort() : undefined,
+    tag: query.tag?.length ? [...query.tag].sort() : undefined,
+  };
 }
 
-/**
- * Baseline loader. Reviewers know this hook is wrong in several ways.
- * Replacing it wholesale is expected and encouraged.
- */
 export function useAssets(query: AssetQuery) {
-  const [state, setState] = useState<State>({
-    items: [],
-    total: 0,
-    nextCursor: null,
-    loading: true,
-    error: null,
+  const params = normalize(query);
+
+  const result = useQuery({
+    // Each response is stored under the search it was for, so an old one can't show up under a new search. (fix 1)
+    queryKey: ["assets", params],
+    queryFn: ({ signal }) => listAssets(params, signal),
+    // Keep showing the last results while the next search loads, instead of flashing empty.
+    placeholderData: keepPreviousData,
   });
 
-  useEffect(() => {
-    setState((s) => ({ ...s, loading: true, error: null }));
-    listAssets(query)
-      .then((page) => {
-        setState({
-          items: page.items,
-          total: page.total,
-          nextCursor: page.nextCursor,
-          loading: false,
-          error: null,
-        });
-      })
-      .catch((err: unknown) => {
-        setState((s) => ({
-          ...s,
-          loading: false,
-          error: err instanceof Error ? err.message : 'Something went wrong',
-        }));
-      });
-  }, [JSON.stringify(query)]);
-
-  return state;
+  return {
+    items: result.data?.items ?? [],
+    total: result.data?.total ?? 0,
+    // No results to show yet (first load, or after an error).
+    hasData: result.data !== undefined,
+    // Results are on screen but a newer request is running.
+    isUpdating: result.isFetching && result.data !== undefined,
+    isFetching: result.isFetching,
+    error: result.error ? result.error.message : null,
+    retry: () => void result.refetch(),
+  };
 }

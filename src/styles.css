@@ -15,7 +15,7 @@
 
 body {
   margin: 0;
-  font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--ink);
   background: var(--bg);
 }
@@ -92,6 +92,7 @@ button:disabled {
 
 .filters {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   align-items: center;
   padding: 10px 16px;
@@ -135,6 +136,7 @@ button:disabled {
   overflow: auto;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-auto-rows: max-content;
   gap: 12px;
   padding: 16px;
   align-content: start;
@@ -253,10 +255,55 @@ button:disabled {
   gap: 6px;
 }
 
-.empty {
+.results {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.results--updating .grid {
+  opacity: 0.5;
+}
+.results__updating {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  margin: 0;
+  padding: 4px 12px;
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.card--skeleton {
+  cursor: default;
+}
+.skeleton-line {
+  height: 12px;
+  margin: 4px 0;
+  border-radius: 4px;
+  background: var(--bg-soft);
+}
+.skeleton-line--short {
+  width: 60%;
+}
+
+.state {
   padding: 48px 16px;
   text-align: center;
   flex: 1;
+}
+.state button {
+  margin-top: 12px;
+}
+.error-text {
+  color: var(--danger);
 }
 
 @media (max-width: 720px) {
