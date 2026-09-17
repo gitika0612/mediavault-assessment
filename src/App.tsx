@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { bulkSetStatus } from "@/api/client";
 import { AssetDetail } from "@/features/assets/AssetDetail";
 import { AssetGrid } from "@/features/assets/AssetGrid";
@@ -53,14 +53,16 @@ export function App() {
     sort: filters.sort,
   });
 
-  function toggleSelect(id: string) {
+  // useCallback keeps this the same function on every render. If it changed,
+  // every memoized card would see a new prop and re-render anyway.
+  const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  }
+  }, []);
 
   async function applyBulkStatus(next: AssetStatus) {
     const ids = [...selectedIds];
@@ -145,19 +147,29 @@ export function App() {
         )}
       </div>
 
-      {selectedIds.size > 0 && (
-        <div className="bulkbar">
-          <span>{selectedIds.size} selected</span>
-          {STATUSES.map((s) => (
-            <button key={s} onClick={() => applyBulkStatus(s)}>
-              Set {statusLabel(s).toLowerCase()}
-            </button>
-          ))}
-          <button onClick={() => setSelectedIds(new Set())}>
-            Clear selection
+      {/* Always shown, so ticking the first card doesn't push the grid down. */}
+      <div className="bulkbar">
+        <span className={selectedIds.size === 0 ? "muted" : undefined}>
+          {selectedIds.size === 0
+            ? "No assets selected"
+            : `${selectedIds.size} selected`}
+        </span>
+        {STATUSES.map((s) => (
+          <button
+            key={s}
+            disabled={selectedIds.size === 0}
+            onClick={() => applyBulkStatus(s)}
+          >
+            Set {statusLabel(s).toLowerCase()}
           </button>
-        </div>
-      )}
+        ))}
+        <button
+          disabled={selectedIds.size === 0}
+          onClick={() => setSelectedIds(new Set())}
+        >
+          Clear selection
+        </button>
+      </div>
 
       {notice && <p className="notice">{notice}</p>}
 

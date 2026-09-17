@@ -1,8 +1,7 @@
-import type { UIEvent } from "react";
+import { useLayoutEffect, useRef, type UIEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { thumbnailUrl } from "@/api/client";
+import { AssetCard } from "@/features/assets/AssetCard";
 import { SkeletonCard } from "@/features/assets/GridStates";
-import { formatBytes, formatDate, statusLabel } from "@/lib/format";
 import { useElementWidth } from "@/lib/useElementWidth";
 import type { Asset } from "@/lib/types";
 
@@ -56,8 +55,34 @@ export function AssetGrid({
     paddingEnd: PADDING,
   });
 
+  // Index of the first asset in the top visible row, updated while scrolling.
+  const topAssetIndex = useRef(0);
+  const previousColumns = useRef(columns);
+
+  // Layout effect so the corrected rows are drawn before the browser paints.
+  useLayoutEffect(() => {
+    // The virtualizer caches row heights. When the width changes the height, tell it to recalculate.
+    virtualizer.measure();
+
+    // Opening the detail panel (or resizing) changes the number of columns, so every
+    // card moves to a different row. Scroll so the card that was at the top stays at the top.
+    if (previousColumns.current !== columns) {
+      previousColumns.current = columns;
+      virtualizer.scrollToIndex(Math.floor(topAssetIndex.current / columns), {
+        align: "start",
+      });
+    }
+  }, [rowHeight, columns, virtualizer]);
+
   function handleScroll(event: UIEvent<HTMLDivElement>) {
     const grid = event.currentTarget;
+    const topRow = Math.max(0, Math.floor((grid.scrollTop - PADDING) / rowHeight));
+    // Only update when the top row really changed. Otherwise opening and closing the
+    // panel would each round down to the start of a row and drift upwards.
+    if (Math.floor(topAssetIndex.current / columns) !== topRow) {
+      topAssetIndex.current = topRow * columns;
+    }
+
     // Ask for the next page when we're within one screen of the bottom.
     if (
       grid.scrollTop + grid.clientHeight >=
@@ -74,36 +99,14 @@ export function AssetGrid({
     }
 
     return (
-      <div
+      <AssetCard
         key={asset.id}
-        className={
-          "card" +
-          (selectedIds.has(asset.id) ? " card--selected" : "") +
-          (activeId === asset.id ? " card--active" : "")
-        }
-        onClick={() => onOpen(asset.id)}
-      >
-        <img className="card__thumb" src={thumbnailUrl(asset.id)} alt="" />
-        <div className="card__body">
-          <p className="card__name" title={asset.name}>
-            {asset.name}
-          </p>
-          <p className="muted">
-            {asset.kind} · {formatBytes(asset.sizeBytes)} ·{" "}
-            {formatDate(asset.updatedAt)}
-          </p>
-          <span className={`pill pill--${asset.status}`}>
-            {statusLabel(asset.status)}
-          </span>
-        </div>
-        <input
-          type="checkbox"
-          className="card__check"
-          checked={selectedIds.has(asset.id)}
-          onClick={(e) => e.stopPropagation()}
-          onChange={() => onToggleSelect(asset.id)}
-        />
-      </div>
+        asset={asset}
+        isSelected={selectedIds.has(asset.id)}
+        isActive={activeId === asset.id}
+        onToggleSelect={onToggleSelect}
+        onOpen={onOpen}
+      />
     );
   }
 

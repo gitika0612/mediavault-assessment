@@ -1,9 +1,15 @@
-import { useEffect, useState } from 'react';
-import { getAsset, thumbnailUrl, updateAsset } from '@/api/client';
-import { formatBytes, formatDate, formatDuration, statusLabel } from '@/lib/format';
-import type { Asset, AssetStatus } from '@/lib/types';
+import { useEffect, useState } from "react";
+import { getAsset, updateAsset } from "@/api/client";
+import { Thumbnail } from "@/features/assets/Thumbnail";
+import {
+  formatBytes,
+  formatDate,
+  formatDuration,
+  statusLabel,
+} from "@/lib/format";
+import type { Asset, AssetStatus } from "@/lib/types";
 
-const STATUSES: AssetStatus[] = ['draft', 'in_review', 'approved', 'archived'];
+const STATUSES: AssetStatus[] = ["draft", "in_review", "approved", "archived"];
 
 interface Props {
   id: string;
@@ -25,7 +31,9 @@ export function AssetDetail({ id, onClose, onSaved }: Props) {
     setError(null);
     getAsset(id)
       .then(setAsset)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Load failed'));
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : "Load failed")
+      );
   }, [id]);
 
   async function setStatus(status: AssetStatus) {
@@ -37,7 +45,7 @@ export function AssetDetail({ id, onClose, onSaved }: Props) {
       setAsset(updated);
       onSaved(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed');
+      setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
     }
@@ -55,7 +63,7 @@ export function AssetDetail({ id, onClose, onSaved }: Props) {
 
       {asset && (
         <div className="panel__body">
-          <img className="panel__thumb" src={thumbnailUrl(asset.id)} alt="" />
+          <Thumbnail key={asset.id} asset={asset} className="panel__thumb" />
           <h3>{asset.name}</h3>
           <dl className="facts">
             <dt>Id</dt>

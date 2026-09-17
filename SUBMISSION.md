@@ -33,13 +33,15 @@ Roughly, and how you split it.
 | 5   | Loading, empty and error look the same, and errors keep old results | `AssetGrid.tsx:18–25`, `useAssets.ts:19`, `:39–43` | Fixed (Task 1)              |
 | 6   | Every loaded card is put into the page                              | `AssetGrid.tsx:29–55`                              | Fixed (Task 2)              |
 | 7   | Cards collapse into thin lines once many rows load                  | `styles.css`                                       | Fixed (Task 1)              |
-| 8   | Ticking one checkbox redraws every card                             | `App.tsx`, `AssetGrid.tsx`                         | Planned (Task 2)            |
-| 9   | Thumbnails ignore `hasThumbnail` and all load at once               | `AssetGrid.tsx`                                    | Planned (Task 2)            |
+| 8   | Ticking one checkbox redraws every card                             | `App.tsx`, `AssetGrid.tsx`                         | Fixed (Task 2)              |
+| 9   | Thumbnails ignore `hasThumbnail` and all load at once               | `AssetGrid.tsx`                                    | Fixed (Task 2)              |
 | 10  | Bulk update fails completely above 50 items                         | `App.tsx`                                          | Planned (Task 3)            |
 | 11  | Partial failures can't be seen or recovered                         | `App.tsx`                                          | Planned (Task 3)            |
 | 12  | The grid doesn't show the changes you make                          | `App.tsx`                                          | Planned (Task 3)            |
 | 13  | Errors are plain text, and nothing retries                          | `client.ts`, `App.tsx`                             | Planned (Task 4)            |
 | 14  | Cards can't be used with a keyboard or screen reader                | `AssetGrid.tsx`                                    | Planned (Task 5)            |
+
+Line numbers refer to the baseline commit `25dec63`.
 
 ### Details
 
@@ -96,14 +98,14 @@ Roughly, and how you split it.
 - **Where:** `App.tsx` - toggleSelect (new Set on every toggle); read by every card at `AssetGrid.tsx` - `checked={selectedIds.has(asset.id)}`
 - **Problem:** Selection is one object passed to the whole grid, so changing one checkbox makes React rebuild every card, not just the one that changed.
 - **Seen:** React DevTools Profiler, one click re-rendered App and AssetGrid. 4.9 ms at 24 cards, 141.7 ms at 5,000 (dev mode).
-- **Status:** planned (Task 2)
+- **Status:** fixed (Task 2). The card is its own `AssetCard` component wrapped in `memo`, and gets `isSelected` / `isActive` as true/false instead of the whole selection, so ticking one card only changes that card's props. `toggleSelect` uses `useCallback` so the function passed to every card stays the same. Checked in the React DevTools Profiler: other cards show "Did not render".
 
 **9. Thumbnails ignore hasThumbnail and all load at once**
 
 - **Where:** `AssetGrid.tsx`
 - **Problem:** The app requests a thumbnail even when the asset says none exists, so those return 404 and show the browser's broken-image icon. There's no loading="lazy", so every thumbnail downloads even when off screen.
 - **Seen:** some cards show a broken-image icon instead of a thumbnail.
-- **Status:** planned (Task 2)
+- **Status:** fixed (Task 2). New Thumbnail component: no request when hasThumbnail is false, same-size placeholder showing the kind, loading="lazy", and onError falls back to the placeholder. Checked: 0 thumbnail 404s and no broken images.
 
 **10. Bulk update fails completely above 50 items**
 
@@ -162,11 +164,12 @@ six of these is about right.
 
 **Virtualization approach**
 
-- TanStack Virtual renders only the rows near the screen (plus 2 above and below); the rest is empty space of the right height. Checked: 54 cards / 429 DOM nodes at 1,000, 1,500 and 2,000 assets loaded.
+- TanStack Virtual renders only the rows near the screen (plus 2 above and below); the rest is empty space of the right height. Checked: see Performance (DOM nodes at 5,000 rows).
 - Columns come from the grid's width (a `ResizeObserver`), using the same 220px minimum as the CSS.
 - Row height is calculated, not measured: 16:10 thumbnail + 104px card body + 12px gap. Every row is the same height, so nothing jumps while scrolling. Cost: card names and details are one line with "…".
-- No layout shift as pages load: while more pages exist, one row of placeholder cards is reserved at the bottom and the next page fills it.
+- No layout shift as pages load: while more pages exist, one row of placeholder cards is reserved at the bottom and the next page fills it. Measured with a `PerformanceObserver` for `layout-shift` in Chrome (production build): score 0 on first load and 0 while loading 1,000 more assets (one run).
 - A new search remounts the grid, so it starts at the top.
+- Opening or closing the detail panel changes the column count, so every card moves. The grid remembers the first card of the top row and scrolls it back to the top. Checked with three open/close round-trips: the top row came back identical each time. Selection never remounts the grid, so its scroll position isn't touched.
 - Rejected: hand-written virtualization. Possible, but more scroll maths to own and test; the library costs +8 kB gzipped.
 - Rejected: measuring each row's real height. Simpler to write, but rows and the scrollbar shift as heights are measured.
 
@@ -190,15 +193,22 @@ Fill in real measurements, not estimates. Say which machine and browser.
 
 **Machine:** MacBook Air M1, 8 GB RAM, macOS 14.5 · **Browser:** Chrome 153.0.8010.36 (arm64) · Mock API with chaos and latency on.
 
-| Metric                                          | Before                | After | How measured                                                                   |
-| ----------------------------------------------- | --------------------- | ----- | ------------------------------------------------------------------------------ |
-| Rendered DOM nodes at 5,000 rows loaded         | 35,041 | 259 (top) / 345 (middle) / 388 (bottom) | `document.querySelectorAll('*').length`. Before: the 24 baseline cards temporarily repeated to 5,000 (the baseline can't load more than 24). After: 5,050 real rows loaded by scrolling, full-width window (6 columns), counted at the top, middle and bottom of the list. The count depends on window size, not on how many rows are loaded. |
-| Cards re-rendered when toggling one selection   |                       |       |                                                                                |
-| Longest task during sustained scroll            |                       |       |                                                                                |
-| Requests fired while typing a 6-character query | 6 (one per keystroke) | 1     | Network tab filtered to `api/assets`, cleared, typed "garden" at normal speed. |
-| Production bundle, gzipped                      |                       |       |                                                                                |
+| Metric                                          | Before                                                       | After                                                                                                                                                               | How measured                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rendered DOM nodes at 5,000 rows loaded         | 35,041                                                       | 259 (top) / 345 (middle) / 388 (bottom)                                                                                                                             | `document.querySelectorAll('*').length`. Before: the 24 baseline cards temporarily repeated to 5,000 (the baseline can't load more than 24). After: 5,050 real rows loaded by scrolling, full-width window (6 columns), counted at the top, middle and bottom of the list. The count depends on window size, not on how many rows are loaded.                                               |
+| Cards re-rendered when toggling one selection   | Every card (24 of 24); 4.9 ms at 24 cards, 141.7 ms at 5,000 | 1 (only the ticked card, of 48 on screen with 5,000 loaded); 3–5 ms per click                                                                                       | Dev mode, React DevTools Profiler. After: 5,000 rows loaded; only the ticked card rendered, all others "Did not render".                                                                                                                                                                                                                                                                    |
+| Longest task during sustained scroll            | Not measured (the baseline can't load 5,000 rows)            | Fast scroll (3,000 px/s): 0, 0 and 1 long task in three runs, longest 76 ms; p95 frame 17 ms. Stress (whole list in 5 s, ~43,000 px/s): 3 long tasks, longest 85 ms | Production build (`vite preview`), 5,050 rows loaded, React DevTools highlights off. Scripted 10 s scroll driven by `requestAnimationFrame`, with a `PerformanceObserver` logging tasks over 50 ms. Some runs also had single frame gaps of 0.45–2.2 s with no long task; I haven't found the cause, so those aren't counted as app work.                                                   |
+| Requests fired while typing a 6-character query | 6 (one per keystroke)                                        | 1                                                                                                                                                                   | Network tab filtered to `api/assets`, cleared, typed "garden" at normal speed.                                                                                                                                                                                                                                                                                                              |
+| Production bundle, gzipped                      | 48.30 kB JS (49.75 kB with CSS + HTML)                       | 69.33 kB JS (71.05 kB with CSS + HTML), +21 kB                                                                                                                      | Gzip sizes printed by `npm run build`, recorded after each step: React Query ≈ +11.4 kB (cache, cancellation, de-duplication, cursor pagination), TanStack Virtual ≈ +8.0 kB (virtualized grid), my own code ≈ +1.6 kB. Justification: the two libraries replace the hardest parts of Tasks 1–2 (request identity and cancellation, bounded DOM) with tested code I don't have to maintain. |
 
-What was the actual bottleneck, and how did you find it?
+**What was the actual bottleneck, and how did you find it?**
+
+The baseline hid its own bottleneck: without pagination it only ever showed 24 cards, so nothing looked slow. To see the real cost, I temporarily repeated those 24 cards to 5,000 in `AssetGrid.tsx` and measured.
+
+- **The biggest cost I measured was re-rendering.** In the React DevTools Profiler, ticking one checkbox re-rendered `App` and `AssetGrid`, which rebuilt every card: 4.9 ms at 24 cards and **141.7 ms at 5,000** (dev mode), far over the 16 ms frame budget, for a change to one card. The cause was the whole `selectedIds` set being passed to every card.
+- **The second cost was DOM size.** Every loaded card was in the page: **35,041 elements** at 5,000 cards, counted with `document.querySelectorAll('*').length`. Measuring this also exposed a CSS bug: with that many rows, the cards collapsed into thin lines.
+
+**What I changed:** memoized `AssetCard` with true/false props and a stable `useCallback`, so one tick re-renders **1 card**; and virtualized rows with TanStack Virtual, so the page holds **259–388 elements** however far you scroll.
 
 ---
 
@@ -220,6 +230,13 @@ follow from it. Then briefly:
   stay distinguishable without relying on colour.
 - **States.** What you did with loading, empty, error, offline and partial
   failure.
+  - **Loading (first load):** grey skeleton cards in the real grid layout, so nothing jumps when results arrive.
+  - **Updating:** while a new search loads, the previous cards stay dimmed with an "Updating results…" label.
+  - **Empty:** "Nothing matches these filters." only for a real empty answer, with a button to clear search and filters.
+  - **Error:** "Couldn't load assets." with Try again; the error replaces the old cards instead of sitting above them.
+  - **Loading the next page:** one row of placeholder cards is reserved at the bottom, so new cards fill space that's already there.
+  - **Next page failed:** "Couldn't load more · Try again" under the cards; the cards already loaded stay.
+  - **Missing thumbnail:** a same-size grey box showing the kind (Image, Video, Document) instead of a broken-image icon.
 - **Contrast.** What you checked against, and with what.
 - **Copy.** Any user-facing message you rewrote and why.
 
