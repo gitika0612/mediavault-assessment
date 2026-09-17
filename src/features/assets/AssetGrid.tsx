@@ -15,8 +15,9 @@ interface Props {
   assets: Asset[];
   hasMore: boolean;
   selectedIds: Set<string>;
+  outOfFilterIds: Set<string>;
   activeId: string | null;
-  onToggleSelect: (id: string) => void;
+  onSelect: (id: string, extend: boolean) => void;
   onOpen: (id: string) => void;
   onNearEnd: () => void;
 }
@@ -25,8 +26,9 @@ export function AssetGrid({
   assets,
   hasMore,
   selectedIds,
+  outOfFilterIds,
   activeId,
-  onToggleSelect,
+  onSelect,
   onOpen,
   onNearEnd,
 }: Props) {
@@ -103,8 +105,9 @@ export function AssetGrid({
         key={asset.id}
         asset={asset}
         isSelected={selectedIds.has(asset.id)}
+        isOutOfFilter={outOfFilterIds.has(asset.id)}
         isActive={activeId === asset.id}
-        onToggleSelect={onToggleSelect}
+        onSelect={onSelect}
         onOpen={onOpen}
       />
     );

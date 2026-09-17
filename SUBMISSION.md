@@ -35,9 +35,9 @@ Roughly, and how you split it.
 | 7   | Cards collapse into thin lines once many rows load                  | `styles.css`                                       | Fixed (Task 1)              |
 | 8   | Ticking one checkbox redraws every card                             | `App.tsx`, `AssetGrid.tsx`                         | Fixed (Task 2)              |
 | 9   | Thumbnails ignore `hasThumbnail` and all load at once               | `AssetGrid.tsx`                                    | Fixed (Task 2)              |
-| 10  | Bulk update fails completely above 50 items                         | `App.tsx`                                          | Planned (Task 3)            |
-| 11  | Partial failures can't be seen or recovered                         | `App.tsx`                                          | Planned (Task 3)            |
-| 12  | The grid doesn't show the changes you make                          | `App.tsx`                                          | Planned (Task 3)            |
+| 10  | Bulk update fails completely above 50 items                         | `App.tsx`                                          | Fixed (Task 3)              |
+| 11  | Partial failures can't be seen or recovered                         | `App.tsx`                                          | Fixed (Task 3)              |
+| 12  | The grid doesn't show the changes you make                          | `App.tsx`                                          | Fixed (Task 3)              |
 | 13  | Errors are plain text, and nothing retries                          | `client.ts`, `App.tsx`                             | Planned (Task 4)            |
 | 14  | Cards can't be used with a keyboard or screen reader                | `AssetGrid.tsx`                                    | Planned (Task 5)            |
 
@@ -112,21 +112,21 @@ Line numbers refer to the baseline commit `25dec63`.
 - **Where:** `App.tsx` (applyBulkStatus)
 - **Problem:** Every selected id goes in one request. The server rejects more than 50, so nothing is updated.
 - **Seen:** selected 72 cards across three searches, clicked "Set approved", got "400: Update at most 50 assets per call."
-- **Status:** planned (Task 3)
+- **Status:** fixed (Task 3). Selection split into groups of 50 and sent with at most 3 requests in flight (bulk.ts); each 207 is split into successes and failures with reasons. Checked with 200 selected: 4 requests, max 3 at once, no 400.
 
 **11. Partial failures can't be seen or recovered**
 
 - **Where:** `App.tsx`
 - **Problem:** After a bulk update the app shows only a count ("19 updated, 5 failed"), not which assets failed or why, even though the server returns that per asset. It then clears the selection, so the failed ones can't be retried.
 - **Seen:** "19 updated, 5 failed" and "20 updated, 4 failed", with the selection cleared both times.
-- **Status:** planned (Task 3)
+- **Status:** fixed (Task 3). The result is one line in the bulk bar: how many changed, then each reason with a count ("20 on legal hold · 1 changed at the same time"); Details lists the assets by name. Failures stay selected, and Retry covers only the reasons that can succeed — legal hold and not found get no retry button.
 
 **12. The grid doesn't show the changes you make**
 
 - **Where:** `App.tsx` (handleSaved is empty)
 - **Problem:** Changing a status, from the detail panel or in bulk, doesn't update the cards. The grid keeps showing old statuses until you search again or reload.
 - **Seen:** approved a Draft asset in the panel; the panel said Approved but the card still said Draft.
-- **Status:** planned (Task 3)
+- **Status:** fixed (Task 3). Both bulk actions and panel saves write the updated asset into React Query's cached pages (`cache.ts`), so the cards change without refetching the list. Successes take the server's asset, which carries the new version.
 
 **13. Errors are plain text, and nothing retries**
 
@@ -173,7 +173,30 @@ six of these is about right.
 - Rejected: hand-written virtualization. Possible, but more scroll maths to own and test; the library costs +8 kB gzipped.
 - Rejected: measuring each row's real height. Simpler to write, but rows and the scrollbar shift as heights are measured.
 
+**Selection model**
+
+- A plain click on a card opens it: in a library the usual action is "look at this one". The checkbox selects, and shift-click extends from the last card clicked, in the order the cards appear.
+- "Select all loaded" says **loaded** on purpose. The bulk endpoint takes ids, not a search, so selecting "all 3,000 matching" would mean paging the whole result set just to collect ids.
+- Changing the search clears the selection, so a bulk action can never hit assets that are no longer on screen.
+- Selecting is one state update and cards are memoized, so it doesn't slow down: 600 selected at once took 0.4 ms of React work and 7 ms to the next frame.
+
 **Optimistic updates and rollback**
+
+- Single edits in the detail panel are deliberately **not** optimistic: the buttons show "Saving…" instead. One asset is cheap to wait for, and it keeps the conflict flow below easy to follow.
+- Clicking a status writes it into React Query's cached pages straight away, so the cards change before the server answers (measured at 14 ms for 50 assets). The list is never refetched afterwards: deep in a list that would reload every loaded page.
+- Before sending, each asset's current status is remembered. When the answer comes back, successes are replaced with the server's asset (new version included) and **only the failures** are put back.
+- Requests are split into groups of 50 (the server's cap) with at most 3 in flight. Checked with 200 selected: 4 requests, never more than 3 at once, no `400 too_many_ids`.
+- A whole request that fails (rate limit, network) marks its ids as failed rather than losing them, so they are retryable like any other failure.
+- Failures are grouped by reason and named. Retry sends only the reasons that can succeed: `conflict` and failed requests. `legal_hold` and `not_found` never get a retry button, because retrying them would be a promise the API can't keep.
+- Assets we just changed that no longer match the status filter stay where they are, marked "No longer matches this filter". Removing rows would jump the scroll and make rolling back a failure harder.
+
+**Conflict handling (409)**
+
+- The detail panel saves with the version it loaded. On `409` it fetches the current asset, shows it, and asks: "This asset changed since you opened it — it's now X. Apply your change again?" with **Apply** and **Keep current**.
+- Rejected: retrying automatically with the fresh version. That is last-write-wins, and in an approval workflow it silently discards someone else's decision.
+- Rejected: failing with an error and making the user reopen the asset. The API doesn't say what changed, so most conflicts are harmless (a rename, say) and that would punish the common case.
+- One click is the price: it takes a second, and it makes overwriting someone else's change deliberate rather than accidental.
+- Bulk actions can't use this flow: the bulk endpoint takes no versions, so it is last-write-wins by design. Its `conflict` results are reported and offered as a retry instead.
 
 **Retry and backoff policy**
 

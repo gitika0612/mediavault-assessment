@@ -1,6 +1,17 @@
-import { useCallback, useState } from "react";
-import { bulkSetStatus } from "@/api/client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AssetDetail } from "@/features/assets/AssetDetail";
+import { setStatusInChunks } from "@/features/assets/bulk";
+import {
+  BulkOutcome,
+  BulkOutcomeDetails,
+  type BulkSummary,
+} from "@/features/assets/BulkOutcome";
+import {
+  applyStatusToCache,
+  putAssetsInCache,
+  restoreStatusInCache,
+} from "@/features/assets/cache";
 import { AssetGrid } from "@/features/assets/AssetGrid";
 import {
   KINDS,
@@ -18,17 +29,22 @@ import {
 import { useAssets } from "@/features/assets/useAssets";
 import { kindLabel, statusLabel } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import type { Asset, AssetStatus } from "@/lib/types";
+import type { AssetStatus } from "@/lib/types";
 
 function toggle<T>(list: T[], value: T, checked: boolean): T[] {
   return checked ? [...list, value] : list.filter((x) => x !== value);
 }
 
 export function App() {
+  const queryClient = useQueryClient();
   const [filters, updateFilters] = useFilters();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [summary, setSummary] = useState<BulkSummary | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  // Assets we just changed that no longer match the status filter, marked on the card.
+  const [outOfFilter, setOutOfFilter] = useState<Set<string>>(new Set());
+  const [applying, setApplying] = useState(false);
 
   // Search once typing pauses, not on every keystroke.
   const debouncedQ = useDebouncedValue(filters.q, 400);
@@ -53,9 +69,45 @@ export function App() {
     sort: filters.sort,
   });
 
+  // The list and the last card clicked, read by the selection handler without
+  // making it a new function on every render (which would re-render every card).
+  const itemsRef = useRef(items);
+  const anchorId = useRef<string | null>(null);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  // A new search starts with nothing selected, so a bulk action can't hit cards
+  // that are no longer on screen.
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setSummary(null);
+    setOutOfFilter(new Set());
+    anchorId.current = null;
+  }, [searchKey]);
+
   // useCallback keeps this the same function on every render. If it changed,
   // every memoized card would see a new prop and re-render anyway.
-  const toggleSelect = useCallback((id: string) => {
+  const selectCard = useCallback((id: string, extend: boolean) => {
+    const ids = itemsRef.current.map((asset) => asset.id);
+    const anchor = anchorId.current;
+
+    // Shift-click adds everything between the last clicked card and this one.
+    if (extend && anchor) {
+      const from = ids.indexOf(anchor);
+      const to = ids.indexOf(id);
+      if (from !== -1 && to !== -1) {
+        const [start, end] = from < to ? [from, to] : [to, from];
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          for (const rangeId of ids.slice(start, end + 1)) next.add(rangeId);
+          return next;
+        });
+        return;
+      }
+    }
+
+    anchorId.current = id;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -64,23 +116,62 @@ export function App() {
     });
   }, []);
 
-  async function applyBulkStatus(next: AssetStatus) {
-    const ids = [...selectedIds];
+  async function applyBulkStatus(ids: string[], next: AssetStatus) {
     if (ids.length === 0) return;
-    setNotice(null);
-    try {
-      // Sends every selected id in one call, which the API refuses above 50.
-      const result = await bulkSetStatus(ids, next);
-      setNotice(`${result.applied} updated, ${result.failed} failed.`);
-      setSelectedIds(new Set());
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Bulk update failed");
+    const idSet = new Set(ids);
+    setSummary(null);
+    setApplying(true);
+
+    // Remember each status so a failed asset can be put back, and each name so
+    // the outcome can say which assets didn't change.
+    const previous = new Map<string, AssetStatus>();
+    const names = new Map<string, string>();
+    for (const asset of itemsRef.current) {
+      if (idSet.has(asset.id)) {
+        previous.set(asset.id, asset.status);
+        names.set(asset.id, asset.name);
+      }
     }
+
+    // Show the change straight away, before the server answers.
+    applyStatusToCache(queryClient, idSet, next);
+
+    // Sent in groups of 50 (the server's cap), at most 3 requests at a time.
+    const { updated, failures } = await setStatusInChunks(ids, next);
+
+    // Keep the successes (with the server's new version) and undo only the failures.
+    putAssetsInCache(queryClient, updated);
+    const rollback = new Map<string, AssetStatus>();
+    for (const failure of failures) {
+      const status = previous.get(failure.id);
+      if (status) rollback.set(failure.id, status);
+    }
+    restoreStatusInCache(queryClient, rollback);
+
+    // A status filter can stop matching the assets we just changed. They stay
+    // where they are (removing rows would jump the scroll), but get a note.
+    if (filters.status.length > 0 && !filters.status.includes(next)) {
+      setOutOfFilter((prev) => {
+        const marked = new Set(prev);
+        for (const asset of updated) marked.add(asset.id);
+        return marked;
+      });
+    }
+
+    setSummary({
+      status: next,
+      total: ids.length,
+      applied: updated.length,
+      failures: failures.map((failure) => ({
+        ...failure,
+        name: names.get(failure.id) ?? failure.id,
+      })),
+    });
+    // Leave the failures selected so they can be retried.
+    setSelectedIds(new Set(failures.map((failure) => failure.id)));
+    setApplying(false);
   }
 
-  function handleSaved(_asset: Asset) {
-    // The list is not told that anything changed, so it shows stale rows.
-  }
 
   return (
     <div className="app">
@@ -154,24 +245,41 @@ export function App() {
             ? "No assets selected"
             : `${selectedIds.size} selected`}
         </span>
+        <button
+          disabled={items.length === 0}
+          onClick={() => setSelectedIds(new Set(items.map((a) => a.id)))}
+        >
+          Select all loaded
+        </button>
         {STATUSES.map((s) => (
           <button
             key={s}
-            disabled={selectedIds.size === 0}
-            onClick={() => applyBulkStatus(s)}
+            disabled={selectedIds.size === 0 || applying}
+            onClick={() => applyBulkStatus([...selectedIds], s)}
           >
             Set {statusLabel(s).toLowerCase()}
           </button>
         ))}
+        {applying && <span className="muted">Applying…</span>}
         <button
           disabled={selectedIds.size === 0}
           onClick={() => setSelectedIds(new Set())}
         >
           Clear selection
         </button>
+
+        {summary && (
+          <BulkOutcome
+            summary={summary}
+            detailsOpen={detailsOpen}
+            onToggleDetails={() => setDetailsOpen(!detailsOpen)}
+            onRetry={(ids) => applyBulkStatus(ids, summary.status)}
+            onDismiss={() => setSummary(null)}
+          />
+        )}
       </div>
 
-      {notice && <p className="notice">{notice}</p>}
+      {summary && detailsOpen && <BulkOutcomeDetails summary={summary} />}
 
       <main className="content">
         <div
@@ -197,8 +305,9 @@ export function App() {
               assets={items}
               hasMore={hasMore}
               selectedIds={selectedIds}
+              outOfFilterIds={outOfFilter}
               activeId={activeId}
-              onToggleSelect={toggleSelect}
+              onSelect={selectCard}
               onOpen={setActiveId}
               onNearEnd={loadMore}
             />
@@ -209,11 +318,7 @@ export function App() {
           )}
         </div>
         {activeId && (
-          <AssetDetail
-            id={activeId}
-            onClose={() => setActiveId(null)}
-            onSaved={handleSaved}
-          />
+          <AssetDetail id={activeId} onClose={() => setActiveId(null)} />
         )}
       </main>
     </div>

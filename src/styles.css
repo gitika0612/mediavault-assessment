@@ -112,6 +112,13 @@ button:disabled {
   align-items: center;
   padding: 10px 16px;
   border-bottom: 1px solid var(--line);
+  overflow: hidden;
+}
+/* Buttons and labels keep their size; only the result text shrinks, so the bar
+   stays one line high and the grid never moves. */
+.bulkbar > span,
+.bulkbar button {
+  flex: none;
 }
 
 .notice,
@@ -166,6 +173,7 @@ button:disabled {
 
 .card {
   position: relative;
+  user-select: none;
   border: 1px solid var(--line);
   border-radius: 6px;
   overflow: hidden;
@@ -344,6 +352,56 @@ button:disabled {
 }
 .error-text {
   color: var(--danger);
+}
+
+/* Result of a bulk action: one line inside the bulk bar, so the grid doesn't move. */
+.outcome {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
+}
+.outcome__text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+/* The names behind that line, only when Details is pressed. */
+.outcome-details {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.outcome-details p {
+  margin: 2px 0;
+}
+
+/* Someone else changed this asset while the panel was open. */
+.conflict {
+  margin: 8px 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--danger);
+  border-radius: 4px;
+  background: var(--bg-soft);
+}
+
+/* Marks an asset we just changed that no longer matches the status filter. */
+.card__note {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  max-width: calc(100% - 44px);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  background: var(--bg);
+  border: 1px solid var(--line);
 }
 
 .load-more-error {

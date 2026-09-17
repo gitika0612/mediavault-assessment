@@ -6,8 +6,9 @@ import type { Asset } from "@/lib/types";
 interface Props {
   asset: Asset;
   isSelected: boolean;
+  isOutOfFilter: boolean;
   isActive: boolean;
-  onToggleSelect: (id: string) => void;
+  onSelect: (id: string, extend: boolean) => void;
   onOpen: (id: string) => void;
 }
 
@@ -17,8 +18,9 @@ interface Props {
 export const AssetCard = memo(function AssetCard({
   asset,
   isSelected,
+  isOutOfFilter,
   isActive,
-  onToggleSelect,
+  onSelect,
   onOpen,
 }: Props) {
   return (
@@ -28,9 +30,15 @@ export const AssetCard = memo(function AssetCard({
         (isSelected ? " card--selected" : "") +
         (isActive ? " card--active" : "")
       }
-      onClick={() => onOpen(asset.id)}
+      // Plain click opens the asset; shift-click extends the selection instead.
+      onClick={(e) =>
+        e.shiftKey ? onSelect(asset.id, true) : onOpen(asset.id)
+      }
     >
       <Thumbnail asset={asset} className="card__thumb" />
+      {isOutOfFilter && (
+        <span className="card__note">No longer matches this filter</span>
+      )}
       <div className="card__body">
         <p className="card__name" title={asset.name}>
           {asset.name}
@@ -47,8 +55,11 @@ export const AssetCard = memo(function AssetCard({
         type="checkbox"
         className="card__check"
         checked={isSelected}
-        onClick={(e) => e.stopPropagation()}
-        onChange={() => onToggleSelect(asset.id)}
+        readOnly
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect(asset.id, e.shiftKey);
+        }}
       />
     </div>
   );
