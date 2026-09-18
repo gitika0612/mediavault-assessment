@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { listAssets } from "@/api/client";
+import { withRetry } from "@/api/retry";
+import { userMessage } from "@/lib/userMessage";
 import type { Asset, AssetPage, AssetQuery } from "@/lib/types";
 
 const PAGE_SIZE = 50;
@@ -39,10 +41,15 @@ export function useAssets(query: AssetQuery) {
     queryKey: ["assets", params],
     // "" means the first page.
     initialPageParam: "",
+    // Retries the server's random 503s and rate limits; a cancelled search stops waiting.
     queryFn: ({ signal, pageParam }) =>
-      listAssets(
-        { ...params, limit: PAGE_SIZE, cursor: pageParam || undefined },
-        signal
+      withRetry(
+        () =>
+          listAssets(
+            { ...params, limit: PAGE_SIZE, cursor: pageParam || undefined },
+            signal
+          ),
+        { attempts: 3, signal }
       ),
     // No cursor means we've reached the end.
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
@@ -84,11 +91,14 @@ export function useAssets(query: AssetQuery) {
     isUpdating:
       result.isFetching && !result.isFetchingNextPage && pages !== undefined,
     isFetching: result.isFetching,
+    // React Query holds queries back while the browser is offline instead of
+    // failing them, so say so rather than leaving the last search on screen.
+    isWaitingForConnection: result.isPaused,
     // A failed next page doesn't count here, so it won't replace the cards already loaded.
-    error: result.error && !loadMoreFailed ? result.error.message : null,
+    error: result.error && !loadMoreFailed ? userMessage(result.error) : null,
     retry: () => void result.refetch(),
     loadMore,
-    loadMoreError: loadMoreFailed && result.error ? result.error.message : null,
+    loadMoreError: loadMoreFailed && result.error ? userMessage(result.error) : null,
     retryLoadMore: () => void result.fetchNextPage(),
   };
 }

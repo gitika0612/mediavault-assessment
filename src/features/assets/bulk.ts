@@ -1,4 +1,5 @@
 import { bulkSetStatus } from "@/api/client";
+import { withRetry } from "@/api/retry";
 import type { Asset, AssetStatus, BulkResult } from "@/lib/types";
 
 // The server refuses more than 50 ids per request.
@@ -57,7 +58,12 @@ export async function setStatusInChunks(
 ): Promise<BulkOutcome> {
   const tasks = chunk(ids, CHUNK_SIZE).map((group) => async (): Promise<BulkOutcome> => {
     try {
-      return splitResults(await bulkSetStatus(group, status));
+      // Only 2 tries: a 50-id request is expensive to repeat, and per-asset
+      // conflicts already come back as retryable failures.
+      const result = await withRetry(() => bulkSetStatus(group, status), {
+        attempts: 2,
+      });
+      return splitResults(result);
     } catch {
       // The whole request failed, so nothing in this group changed.
       return {

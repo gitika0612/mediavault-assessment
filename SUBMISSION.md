@@ -38,7 +38,7 @@ Roughly, and how you split it.
 | 10  | Bulk update fails completely above 50 items                         | `App.tsx`                                          | Fixed (Task 3)              |
 | 11  | Partial failures can't be seen or recovered                         | `App.tsx`                                          | Fixed (Task 3)              |
 | 12  | The grid doesn't show the changes you make                          | `App.tsx`                                          | Fixed (Task 3)              |
-| 13  | Errors are plain text, and nothing retries                          | `client.ts`, `App.tsx`                             | Planned (Task 4)            |
+| 13  | Errors are plain text, and nothing retries                          | `client.ts`, `App.tsx`                             | Fixed (Task 4)              |
 | 14  | Cards can't be used with a keyboard or screen reader                | `AssetGrid.tsx`                                    | Planned (Task 5)            |
 
 Line numbers refer to the baseline commit `25dec63`.
@@ -133,7 +133,7 @@ Line numbers refer to the baseline commit `25dec63`.
 - **Where:** `client.ts` and `App.tsx`
 - **Problem:** Every failure becomes a "<status>: <message>" string, so code can only tell errors apart by matching text, and users see it as-is. There's no retry, no waiting when the server says to, and no way to cancel a request.
 - **Seen:** a search returned 503 and the page showed "503: Search index is warming up." with no retry in the Network tab.
-- **Status:** planned (Task 4)
+- **Status:** fixed (Task 4). Failures now carry a kind (http / network / offline), a status and the server's code (`errors.ts`), so code branches on those instead of reading text. Transient failures are retried with backoff and jitter (`retry.ts`), and `userMessage.ts` turns every error into plain words. Checked: a real 503 during a search now goes 503 → 200 with nothing shown to the user; a rate limit gives 3 attempts about 3 s apart, then "MediaVault is busy right now. Wait a moment and try again."
 
 **14. Cards can't be used with a keyboard or screen reader**
 
@@ -200,6 +200,27 @@ six of these is about right.
 
 **Retry and backoff policy**
 
+- Whether to retry is decided from the error's **kind and status**, never its text: offline no, network yes, and for http only 429, 500, 502, 503 and 504. So 400, 409 and 422 can't be retried by accident.
+- **Waits:** when the server sends `Retry-After` (3 s on 429, 2 s on 503) that is a **floor**, plus up to 500 ms of jitter. Otherwise it backs off (300 ms, 600 ms, capped at 4 s) and waits a random part of that, so requests that failed together don't retry together.
+- **Attempts are capped** and differ by cost: 3 for searches and single assets, 2 for bulk chunks (a 50-id request is expensive to repeat, and per-asset conflicts already come back as retryable failures).
+- **Saves retry only the server's `write_failed`.** The mock rolls that failure *before* applying the change, so repeating it is safe. A dropped connection isn't: the change may already have landed, so it isn't retried.
+- **A cancelled request stops waiting** instead of firing its retry later, so an abandoned search doesn't spend rate-limit budget.
+- **Retries live in one place** (`withRetry`), and React Query's own retry stays off. One policy to reason about, and it also covers the calls React Query never sees, like bulk chunks.
+- Measured: `Retry-After: 3 s` produced waits of 3.26 / 3.34 / 3.28 s; a real 503 during a search recovered as 503 → 200 with nothing shown to the user; a rate-limited search made exactly 3 attempts (0.4 s, 3.5 s, 6.7 s) and then stopped.
+
+**Offline**
+
+- `navigator.onLine` plus the browser's online/offline events. While offline, requests aren't sent at all: they fail in about 1 ms as an "offline" error, which is never retryable.
+- The user is told twice: a banner ("You're offline. Nothing can load or save until you reconnect.") and, over the dimmed grid, "Waiting for a connection…". Bulk and panel status buttons are disabled.
+- React Query holds queries back while offline rather than failing them, which left the previous search's cards on screen looking current. The "Waiting for a connection…" label exists because of that.
+- On reconnect, only queries that are in error are refetched — refetching everything would reload every loaded page.
+- **Not done: queueing writes made while offline.** The brief calls it a bonus. An approval that silently lands ten minutes later, after the reviewer has moved on, is worse than refusing it now.
+
+**Error boundary**
+
+- Two boundaries, one around the grid and one around the detail panel, so a crash in one leaves the other usable. Each shows "… stopped working. The rest of the page still works." with Try again, which remounts that part.
+- Checked by making cards throw: the grid was replaced, the panel, search, filters and bulk bar kept working, and Try again brought all 20 cards back. Same test for the panel.
+
 **State placement and URL sync**
 
 - Search and filters (`q`, `status`, `kind`, `tag`, `sort`) live in the URL, so reload, shared links and Back restore the same view.
@@ -260,8 +281,15 @@ follow from it. Then briefly:
   - **Loading the next page:** one row of placeholder cards is reserved at the bottom, so new cards fill space that's already there.
   - **Next page failed:** "Couldn't load more · Try again" under the cards; the cards already loaded stay.
   - **Missing thumbnail:** a same-size grey box showing the kind (Image, Video, Document) instead of a broken-image icon.
+  - **Offline:** a banner at the top, and "Waiting for a connection…" over the dimmed grid; actions that would fail are disabled.
+  - **Partial failure (bulk):** one line in the bulk bar — "408 of 500 approved · 62 on legal hold · 30 changed at the same time" — with Retry for the ones that can succeed, and Details for the names.
+  - **A crash:** the grid or the panel is replaced by "… stopped working. The rest of the page still works." with Try again; the rest of the page keeps working.
 - **Contrast.** What you checked against, and with what.
 - **Copy.** Any user-facing message you rewrote and why.
+  - Every error passes through one function (`userMessage.ts`), so no status codes or server phrasing reach the screen. "429: Too many requests in the last 10 seconds." became "MediaVault is busy right now. Wait a moment and try again."
+  - Each message says what to do next: "Search is briefly unavailable. Try again in a moment.", "That change didn't save. Try again.", "On legal hold — this asset can't be archived.", "Names need at least 3 characters."
+  - Mistakes the app makes (`stale_cursor`, `too_many_ids`, `bad_cursor`, `bad_request`) never show their code: the user reads "Something went wrong on our side. Try reloading the page." and the code goes to the console, for me rather than them.
+  - Counts say "loaded", not "shown": with virtualization only a few cards exist at a time, so "5,050 of 12,400 loaded" is the honest wording.
 
 Screenshots in the repo are welcome — link them here.
 
@@ -270,6 +298,14 @@ Screenshots in the repo are welcome — link them here.
 ## Trade-offs and cuts
 
 What you deliberately did not do, and what you would do with another day.
+
+- **Writes made while offline aren't queued.** Buttons are disabled instead. An approval that silently lands ten minutes later, after the reviewer has moved on, is worse than being told "not now". The brief calls queueing a bonus.
+- **Undo after a bulk action.** The brief allows retry *or* undo; retry is the half that distinguishes a legal-hold failure (never succeeds) from a random conflict (usually does). Undo would need a second bulk run grouped by each asset's previous status.
+- **A loaded list is never refreshed on its own.** Going back to a search shows what was cached. Refetching would reload every loaded page at once, which the rate limit can't take.
+- **Tag filtering works through the URL but has no picker.**
+- **Card names and details are cut to one line**, so every row is the same height and scrolling stays smooth.
+- **"Select all loaded" means loaded, not all matching.** The bulk endpoint takes ids, so selecting "all 3,000 matching" would mean paging the entire result set first.
+- **After a retry, permanent failures drop out of the result line.** The line always describes the last action.
 
 ## Critique of the API
 

@@ -1,3 +1,4 @@
+import { createApiError, errorFromResponse } from '@/api/errors';
 import type { Asset, AssetPage, AssetQuery, BulkResult } from '@/lib/types';
 
 /**
@@ -26,20 +27,24 @@ function toSearchParams(query: AssetQuery): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const body = await res.json();
-      detail = body?.error?.message ?? detail;
-    } catch {
-      /* response was not JSON */
-    }
-    throw new Error(`${res.status}: ${detail}`);
+  // Don't send anything while offline: it would fail, then be retried, for nothing.
+  if (!navigator.onLine) {
+    throw createApiError('offline', 0, 'unknown', 'No connection');
   }
+
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      ...init,
+      headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+    });
+  } catch (error) {
+    // A cancelled request isn't a failure; let it through as it is.
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    throw createApiError('network', 0, 'unknown', 'Network request failed');
+  }
+
+  if (!res.ok) throw await errorFromResponse(res);
   return res.json() as Promise<T>;
 }
 

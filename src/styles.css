@@ -50,6 +50,24 @@ button {
   background: var(--bg);
   cursor: pointer;
 }
+
+/* Drop the OS control and draw our own, so it matches the search box.
+   The background image is the chevron. */
+select {
+  appearance: none;
+  padding: 6px 30px 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background-color: var(--bg);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2362676f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 6px;
+  cursor: pointer;
+}
+select:hover {
+  border-color: var(--ink-soft);
+}
 button:hover:not(:disabled) {
   background: var(--bg-soft);
 }
@@ -377,6 +395,14 @@ button:disabled {
 }
 .outcome-details p {
   margin: 2px 0;
+}
+
+.offline {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 13px;
+  background: #fff4e0;
+  border-bottom: 1px solid var(--line);
 }
 
 /* Someone else changed this asset while the panel was open. */

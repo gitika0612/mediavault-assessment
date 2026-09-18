@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { AssetDetail } from "@/features/assets/AssetDetail";
 import { setStatusInChunks } from "@/features/assets/bulk";
 import {
@@ -29,6 +30,7 @@ import {
 import { useAssets } from "@/features/assets/useAssets";
 import { kindLabel, statusLabel } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import type { AssetStatus } from "@/lib/types";
 
 function toggle<T>(list: T[], value: T, checked: boolean): T[] {
@@ -37,6 +39,7 @@ function toggle<T>(list: T[], value: T, checked: boolean): T[] {
 
 export function App() {
   const queryClient = useQueryClient();
+  const online = useOnlineStatus();
   const [filters, updateFilters] = useFilters();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -56,6 +59,7 @@ export function App() {
     hasData,
     isUpdating,
     isFetching,
+    isWaitingForConnection,
     error,
     retry,
     loadMore,
@@ -76,6 +80,18 @@ export function App() {
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
+
+  // Back online: refresh only what failed. Refetching everything would reload
+  // every page the list has loaded.
+  const wasOnline = useRef(online);
+  useEffect(() => {
+    if (online && !wasOnline.current) {
+      void queryClient.refetchQueries({
+        predicate: (query) => query.state.status === "error",
+      });
+    }
+    wasOnline.current = online;
+  }, [online, queryClient]);
 
   // A new search starts with nothing selected, so a bulk action can't hit cards
   // that are no longer on screen.
@@ -172,7 +188,6 @@ export function App() {
     setApplying(false);
   }
 
-
   return (
     <div className="app">
       <header className="topbar">
@@ -184,7 +199,9 @@ export function App() {
           value={filters.q}
           onChange={(e) => updateFilters({ q: e.target.value }, "replace")}
         />
+        <span className="muted">Sort</span>
         <select
+          aria-label="Sort assets"
           value={filters.sort}
           onChange={(e) =>
             updateFilters({ sort: e.target.value as Sort }, "push")
@@ -238,6 +255,12 @@ export function App() {
         )}
       </div>
 
+      {!online && (
+        <p className="offline" role="status">
+          You're offline. Nothing can load or save until you reconnect.
+        </p>
+      )}
+
       {/* Always shown, so ticking the first card doesn't push the grid down. */}
       <div className="bulkbar">
         <span className={selectedIds.size === 0 ? "muted" : undefined}>
@@ -254,7 +277,7 @@ export function App() {
         {STATUSES.map((s) => (
           <button
             key={s}
-            disabled={selectedIds.size === 0 || applying}
+            disabled={selectedIds.size === 0 || applying || !online}
             onClick={() => applyBulkStatus([...selectedIds], s)}
           >
             Set {statusLabel(s).toLowerCase()}
@@ -283,10 +306,18 @@ export function App() {
 
       <main className="content">
         <div
-          className={isUpdating ? "results results--updating" : "results"}
+          className={
+            isUpdating || isWaitingForConnection
+              ? "results results--updating"
+              : "results"
+          }
           aria-busy={isFetching}
         >
-          {isUpdating && <p className="results__updating">Updating results…</p>}
+          {isWaitingForConnection ? (
+            <p className="results__updating">Waiting for a connection…</p>
+          ) : (
+            isUpdating && <p className="results__updating">Updating results…</p>
+          )}
 
           {error && !isFetching ? (
             <ErrorState message={error} onRetry={retry} />
@@ -299,18 +330,20 @@ export function App() {
               }
             />
           ) : (
-            <AssetGrid
-              // A new search starts a fresh grid, scrolled to the top.
-              key={searchKey}
-              assets={items}
-              hasMore={hasMore}
-              selectedIds={selectedIds}
-              outOfFilterIds={outOfFilter}
-              activeId={activeId}
-              onSelect={selectCard}
-              onOpen={setActiveId}
-              onNearEnd={loadMore}
-            />
+            <ErrorBoundary label="The asset list">
+              <AssetGrid
+                // A new search starts a fresh grid, scrolled to the top.
+                key={searchKey}
+                assets={items}
+                hasMore={hasMore}
+                selectedIds={selectedIds}
+                outOfFilterIds={outOfFilter}
+                activeId={activeId}
+                onSelect={selectCard}
+                onOpen={setActiveId}
+                onNearEnd={loadMore}
+              />
+            </ErrorBoundary>
           )}
 
           {loadMoreError && (
@@ -318,7 +351,9 @@ export function App() {
           )}
         </div>
         {activeId && (
-          <AssetDetail id={activeId} onClose={() => setActiveId(null)} />
+          <ErrorBoundary label="The detail panel">
+            <AssetDetail id={activeId} onClose={() => setActiveId(null)} />
+          </ErrorBoundary>
         )}
       </main>
     </div>

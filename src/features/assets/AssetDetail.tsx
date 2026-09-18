@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getAsset, updateAsset } from "@/api/client";
+import { isApiError } from "@/api/errors";
+import { withRetry } from "@/api/retry";
 import { putAssetsInCache } from "@/features/assets/cache";
 import { Thumbnail } from "@/features/assets/Thumbnail";
 import { useAsset } from "@/features/assets/useAsset";
@@ -10,23 +12,11 @@ import {
   formatDuration,
   statusLabel,
 } from "@/lib/format";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
+import { userMessage } from "@/lib/userMessage";
 import type { AssetStatus } from "@/lib/types";
 
 const STATUSES: AssetStatus[] = ["draft", "in_review", "approved", "archived"];
-
-// Errors are still strings like "409: …" until Task 4 gives them types.
-function errorStatus(error: unknown): number | null {
-  if (!(error instanceof Error)) return null;
-  const match = /^(\d{3}):/.exec(error.message);
-  return match ? Number(match[1]) : null;
-}
-
-function saveMessage(error: unknown): string {
-  const status = errorStatus(error);
-  if (status === 500) return "That change didn't save. Try again.";
-  if (error instanceof Error) return error.message.replace(/^\d{3}:\s*/, "");
-  return "Save failed";
-}
 
 interface Props {
   id: string;
@@ -35,6 +25,7 @@ interface Props {
 
 export function AssetDetail({ id, onClose }: Props) {
   const queryClient = useQueryClient();
+  const online = useOnlineStatus();
   const { asset, loadError, isLoading } = useAsset(id);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -50,13 +41,23 @@ export function AssetDetail({ id, onClose }: Props) {
     setSaving(true);
     setSaveError(null);
     try {
-      const updated = await updateAsset(id, version, { status: next });
+      // Only retry the server's random write failure: it happens before the change
+      // is applied, so sending it again is safe. A dropped connection isn't, because
+      // the change may already have gone through.
+      const updated = await withRetry(
+        () => updateAsset(id, version, { status: next }),
+        {
+          attempts: 2,
+          shouldRetry: (error) =>
+            isApiError(error) && error.code === "write_failed",
+        }
+      );
       // Update the panel and the card, so the grid doesn't go stale.
       queryClient.setQueryData(["asset", id], updated);
       putAssetsInCache(queryClient, [updated]);
       setWanted(null);
     } catch (error) {
-      if (errorStatus(error) === 409) {
+      if (isApiError(error) && error.code === "version_conflict") {
         // Someone changed it since we loaded it. Show their version and ask,
         // rather than quietly overwriting their decision.
         const fresh = await getAsset(id);
@@ -64,7 +65,7 @@ export function AssetDetail({ id, onClose }: Props) {
         putAssetsInCache(queryClient, [fresh]);
         setWanted(next);
       } else {
-        setSaveError(saveMessage(error));
+        setSaveError(userMessage(error));
       }
     } finally {
       setSaving(false);
@@ -146,7 +147,7 @@ export function AssetDetail({ id, onClose }: Props) {
             {STATUSES.map((status) => (
               <button
                 key={status}
-                disabled={saving || status === asset.status}
+                disabled={saving || !online || status === asset.status}
                 onClick={() => save(status, asset.version)}
               >
                 {statusLabel(status)}
