@@ -19,6 +19,9 @@ export default defineConfig({
   // Same proxy for the built app, so a deployed preview reaches the mock API
   // running beside it.
   preview: {
+    // The preview server only answers hosts it knows; the deployed one isn't
+    // localhost.
+    allowedHosts: ['.onrender.com'],
     proxy: {
       '/api': {
         target: 'http://localhost:8787',
