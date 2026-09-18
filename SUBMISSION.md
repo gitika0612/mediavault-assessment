@@ -1,9 +1,5 @@
 # Submission
 
-Keep this tight. Bullet points are fine. We read this before we read your code,
-and a clear account of your reasoning carries real weight — including where you
-chose not to do something.
-
 ## Video walkthrough
 
 Paste your Loom (or equivalent) link here. 5–10 minutes.
@@ -16,9 +12,27 @@ Paste your Loom (or equivalent) link here. 5–10 minutes.
 
 Anything we need to know beyond `npm install && npm run dev`.
 
+---
+
 ## Time spent
 
-Roughly, and how you split it.
+About 13.5 hours, roughly split like this:
+
+|                                                                     |                     |
+| ------------------------------------------------------------------- | ------------------- |
+| Task 0 — defect inventory and baseline measurements                 | 1.5 h               |
+| Task 1 — search correctness, URL state, result states               | 2 h                 |
+| Task 2 — pagination, virtualization, memoization, scroll            | 2.5 h               |
+| Task 3 — bulk actions, partial failure, 409                         | 2 h                 |
+| Task 4 — typed errors, retry and backoff, offline, error boundaries | 2 h                 |
+| Task 5 — keyboard and screen reader                                 | cut, see Trade-offs |
+| Task 6 — visual system, states, contrast, narrow layout             | 2.5 h               |
+| `SUBMISSION.md` and `docs/measurements.md`                          | 1 h                 |
+
+A fair slice of Tasks 0 and 2 went on measuring rather than building — DOM counts,
+re-render counts and request timings — because the brief asks for measured numbers
+rather than estimates. The steps for reproducing each one are in
+`docs/measurements.md`.
 
 ---
 
@@ -39,7 +53,7 @@ Roughly, and how you split it.
 | 11  | Partial failures can't be seen or recovered                         | `App.tsx`                                          | Fixed (Task 3)              |
 | 12  | The grid doesn't show the changes you make                          | `App.tsx`                                          | Fixed (Task 3)              |
 | 13  | Errors are plain text, and nothing retries                          | `client.ts`, `App.tsx`                             | Fixed (Task 4)              |
-| 14  | Cards can't be used with a keyboard or screen reader                | `AssetGrid.tsx`                                    | Planned (Task 5)            |
+| 14  | Cards can't be used with a keyboard or screen reader                | `AssetGrid.tsx`                                    | Cut (Task 5)                |
 
 Line numbers refer to the baseline commit `25dec63`.
 
@@ -139,14 +153,12 @@ Line numbers refer to the baseline commit `25dec63`.
 
 - **Where:** `AssetGrid.tsx`
 - **Problem:** A card is a plain div with a click handler, so you can't focus it, open it with Enter, or know what it is with a screen reader. The checkboxes have no name, so a screen reader just hears "checkbox".
-- **Status:** planned (Task 5)
+- **Status:** cut (Task 5). Found here, and deliberately not fixed — the reason is
+  in Trade-offs and cuts.
 
 ---
 
 ## Key decisions
-
-For each significant choice: what you did, what you rejected, and why. Three to
-six of these is about right.
 
 **Data fetching and caching**
 
@@ -203,7 +215,7 @@ six of these is about right.
 - Whether to retry is decided from the error's **kind and status**, never its text: offline no, network yes, and for http only 429, 500, 502, 503 and 504. So 400, 409 and 422 can't be retried by accident.
 - **Waits:** when the server sends `Retry-After` (3 s on 429, 2 s on 503) that is a **floor**, plus up to 500 ms of jitter. Otherwise it backs off (300 ms, 600 ms, capped at 4 s) and waits a random part of that, so requests that failed together don't retry together.
 - **Attempts are capped** and differ by cost: 3 for searches and single assets, 2 for bulk chunks (a 50-id request is expensive to repeat, and per-asset conflicts already come back as retryable failures).
-- **Saves retry only the server's `write_failed`.** The mock rolls that failure *before* applying the change, so repeating it is safe. A dropped connection isn't: the change may already have landed, so it isn't retried.
+- **Saves retry only the server's `write_failed`.** The mock rolls that failure _before_ applying the change, so repeating it is safe. A dropped connection isn't: the change may already have landed, so it isn't retried.
 - **A cancelled request stops waiting** instead of firing its retry later, so an abandoned search doesn't spend rate-limit budget.
 - **Retries live in one place** (`withRetry`), and React Query's own retry stays off. One policy to reason about, and it also covers the calls React Query never sees, like bulk chunks.
 - Measured: `Retry-After: 3 s` produced waits of 3.26 / 3.34 / 3.28 s; a real 503 during a search recovered as 503 → 200 with nothing shown to the user; a rate-limited search made exactly 3 attempts (0.4 s, 3.5 s, 6.7 s) and then stopped.
@@ -233,8 +245,6 @@ six of these is about right.
 
 ## Performance
 
-Fill in real measurements, not estimates. Say which machine and browser.
-
 **Machine:** MacBook Air M1, 8 GB RAM, macOS 14.5 · **Browser:** Chrome 153.0.8010.36 (arm64) · Mock API with chaos and latency on.
 
 | Metric                                          | Before                                                       | After                                                                                                                                                               | How measured                                                                                                                                                                                                                                                                                                                                                                                |
@@ -258,9 +268,9 @@ The baseline hid its own bottleneck: without pagination it only ever showed 24 c
 
 ## Accessibility
 
-- Keyboard model you implemented, in one paragraph.
-- How you tested it, including any screen reader.
-- Known gaps.
+Not done — this was Task 5, and I cut it. The gap is defect 14 above: cards can't
+be reached or opened with a keyboard, and the card checkboxes have no names for a
+screen reader. I did not run a screen reader. See Trade-offs and cuts for why.
 
 ---
 
@@ -294,8 +304,7 @@ tenth screen.
   The same dot appears everywhere the status does: on the card pill, in the filter
   checkboxes and on the detail panel's status buttons, always next to its label.
   Nothing in the app is colour-only or icon-only.
-- **States.** What you did with loading, empty, error, offline and partial
-  failure.
+- **States.** Nine of them, each drawn rather than left to the default:
   - **Loading (first load):** grey skeleton cards in the real grid layout, so nothing jumps when results arrive.
   - **Updating:** while a new search loads, the previous cards stay dimmed with an "Updating results…" label.
   - **Empty:** "Nothing matches these filters." only for a real empty answer, with a button to clear search and filters.
@@ -314,7 +323,7 @@ tenth screen.
   inputs, well under the 3:1 non-text rule, so `--border-control` (#868e9c —
   3.30:1 on white, 3.05:1 on the sunken bar) was added for controls and the light
   border kept for edges that carry no information.
-- **Copy.** Any user-facing message you rewrote and why.
+- **Copy.** Nothing the user reads is a status code or a server phrase:
   - Every error passes through one function (`userMessage.ts`), so no status codes or server phrasing reach the screen. "429: Too many requests in the last 10 seconds." became "MediaVault is busy right now. Wait a moment and try again."
   - Each message says what to do next: "Search is briefly unavailable. Try again in a moment.", "That change didn't save. Try again.", "On legal hold — this asset can't be archived.", "Names need at least 3 characters."
   - Mistakes the app makes (`stale_cursor`, `too_many_ids`, `bad_cursor`, `bad_request`) never show their code: the user reads "Something went wrong on our side. Try reloading the page." and the code goes to the console, for me rather than them.
@@ -339,10 +348,20 @@ tenth screen.
 
 ## Trade-offs and cuts
 
-What you deliberately did not do, and what you would do with another day.
-
+- **Keyboard and screen reader support (Task 5).** The largest cut, and the plain
+  reason is that I ran out of time. I found it early (defect 14) and worked in the
+  order the brief suggests — search correctness, scale, bulk failure, resilience,
+  then interface — and the budget was gone before I reached it. What I had left
+  wasn't enough to do it properly, and this is not a small job here: the grid keeps
+  only the visible rows in the page, so the card holding focus can be unmounted by
+  scrolling or removed by a filter, and a roving tabindex has to survive that
+  instead of losing focus to a detached node. Focus also has to move into the
+  detail panel and come back to the right card when it closes, including when that
+  card no longer exists. An hour would have bought focusable cards that look
+  finished and behave worse than what is there now, so I left it whole and wrote
+  down exactly what is missing.
 - **Writes made while offline aren't queued.** Buttons are disabled instead. An approval that silently lands ten minutes later, after the reviewer has moved on, is worse than being told "not now". The brief calls queueing a bonus.
-- **Undo after a bulk action.** The brief allows retry *or* undo; retry is the half that distinguishes a legal-hold failure (never succeeds) from a random conflict (usually does). Undo would need a second bulk run grouped by each asset's previous status.
+- **Undo after a bulk action.** The brief allows retry _or_ undo; retry is the half that distinguishes a legal-hold failure (never succeeds) from a random conflict (usually does). Undo would need a second bulk run grouped by each asset's previous status.
 - **A loaded list is never refreshed on its own.** Going back to a search shows what was cached. Refetching would reload every loaded page at once, which the rate limit can't take.
 - **Tag filtering works through the URL but has no picker.**
 - **Card names and details are cut to one line**, so every row is the same height and scrolling stays smooth.
