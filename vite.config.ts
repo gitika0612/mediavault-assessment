@@ -16,5 +16,15 @@ export default defineConfig({
       },
     },
   },
+  // Same proxy for the built app, so a deployed preview reaches the mock API
+  // running beside it.
+  preview: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+      },
+    },
+  },
   build: { sourcemap: true },
 });
