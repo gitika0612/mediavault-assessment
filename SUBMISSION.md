@@ -1,16 +1,24 @@
 # Submission
 
+**Repo:** https://github.com/gitika0612/mediavault-assessment
+
+**Live app:** https://mediavault-assessment-o2zn.onrender.com
+
+Render's free tier, so the first load can take up to a minute while the service
+wakes up. Chaos and latency are on, and the data resets when it restarts.
+
+---
+
 ## Video walkthrough
 
-Paste your Loom (or equivalent) link here. 5–10 minutes.
-
-**Link:**
+**Link:** https://www.loom.com/share/4f0d237c14ec49328b36d6819717d126
 
 ---
 
 ## How to run it
 
-Anything we need to know beyond `npm install && npm run dev`.
+`npm install && npm run dev` is all it needs. That starts both halves: the mock
+API on 8787 and Vite on 5173, with the dev server proxying `/api` across.
 
 ---
 
