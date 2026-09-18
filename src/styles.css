@@ -1,11 +1,49 @@
 :root {
-  --ink: #1b1d21;
-  --ink-soft: #62676f;
-  --line: #d9dce1;
-  --bg: #ffffff;
-  --bg-soft: #f5f6f8;
+  /* Surfaces and lines */
+  --surface: #ffffff;
+  --surface-sunken: #f5f6f8;
+  --border: #d9dce1; /* dividers and card edges: decorative */
+  --border-strong: #b6bbc4; /* hover and other quiet emphasis */
+  --border-control: #868e9c; /* buttons, inputs, selected states: 3:1, so the control is visible */
+
+  /* Text */
+  --text: #1b1d21;
+  --text-muted: #62676f;
+
+  /* Meaning: one accent, and a colour per outcome */
   --accent: #2b5fd9;
+  --accent-surface: #eef2fd;
   --danger: #a5301f;
+  --danger-surface: #fdeeec;
+  --danger-border: #e6b3aa;
+  --warning-surface: #fff4e0;
+  --warning-border: #ecd3a2;
+  --success-surface: #e6f4ea;
+  --success-border: #b7dfc4;
+
+  /* Spacing: 4px steps, so everything lines up */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 48px;
+
+  /* Type: six sizes, two weights */
+  --size-xs: 11px;
+  --size-sm: 12px;
+  --size-md: 13px;
+  --size-card: 14px; /* card name: one step above the line under it */
+  --size-base: 15px;
+  --size-lg: 18px;
+  --weight-normal: 400;
+  --weight-strong: 600;
+
+  /* Shape */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-pill: 999px;
+
   color-scheme: light;
 }
 
@@ -15,25 +53,26 @@
 
 body {
   margin: 0;
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: var(--ink);
-  background: var(--bg);
+  font: var(--weight-normal) var(--size-base) / 1.5 system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--surface);
 }
 
 h1 {
-  font-size: 18px;
+  font-size: var(--size-lg);
   margin: 0;
 }
 h2 {
-  font-size: 16px;
+  font-size: var(--size-base);
   margin: 0;
 }
 h3 {
-  font-size: 15px;
-  margin: 12px 0 4px;
+  font-size: var(--size-base);
+  margin: var(--space-3) 0 var(--space-1);
 }
 p {
-  margin: 4px 0;
+  margin: var(--space-1) 0;
 }
 
 button,
@@ -43,36 +82,46 @@ input {
   color: inherit;
 }
 
-button {
-  padding: 5px 10px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--bg);
+/* Anything clickable says so. */
+input[type="checkbox"],
+label:has(input[type="checkbox"]) {
   cursor: pointer;
+}
+
+button {
+  padding: 5px var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+}
+button:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+button:disabled {
+  color: var(--text-muted);
+  cursor: default;
 }
 
 /* Drop the OS control and draw our own, so it matches the search box.
    The background image is the chevron. */
 select {
   appearance: none;
-  padding: 6px 30px 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background-color: var(--bg);
+  padding: 6px 30px 6px var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface);
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2362676f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 10px center;
+  background-position: right var(--space-3) center;
   background-size: 10px 6px;
   cursor: pointer;
 }
-select:hover {
-  border-color: var(--ink-soft);
+select:hover:not(:disabled) {
+  border-color: var(--text-muted);
 }
-button:hover:not(:disabled) {
-  background: var(--bg-soft);
-}
-button:disabled {
-  color: var(--ink-soft);
+select:disabled {
+  color: var(--text-muted);
   cursor: default;
 }
 
@@ -82,8 +131,8 @@ button:disabled {
 }
 
 .muted {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--text-muted);
+  font-size: var(--size-md);
 }
 
 .app {
@@ -94,42 +143,80 @@ button:disabled {
 
 .topbar {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: var(--space-3);
   align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
 }
 
 .search {
-  flex: 1;
+  flex: 1 1 200px;
+  min-width: 0;
   max-width: 380px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  padding: 6px var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
 }
 
 .filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: var(--space-4);
   align-items: center;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-soft);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-sunken);
 }
+/* A label and its boxes move together when the row wraps. */
+.filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+/* Narrow-screen filter dropdown: the button looks like the sort box, the panel
+   floats over the grid so opening it doesn't push the cards down. */
+.filter-menu {
+  position: relative;
+}
+.filter-menu__button {
+  padding: 6px 30px 6px var(--space-3);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2362676f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+  background-size: 10px 6px;
+}
+.filter-menu__panel {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 4px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 12%);
+  white-space: nowrap;
+}
+
 .filters label {
   display: inline-flex;
   gap: 6px;
   align-items: center;
-  font-size: 13px;
+  font-size: var(--size-md);
 }
 
 .bulkbar {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
   overflow: hidden;
 }
 /* Buttons and labels keep their size; only the result text shrinks, so the bar
@@ -138,13 +225,18 @@ button:disabled {
 .bulkbar button {
   flex: none;
 }
+/* The count leads the bar once something is selected. */
+.bulkbar__count {
+  font-weight: var(--weight-strong);
+  font-size: var(--size-md);
+}
 
 .notice,
 .error {
   margin: 0;
-  padding: 8px 16px;
-  font-size: 13px;
-  border-bottom: 1px solid var(--line);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--size-md);
+  border-bottom: 1px solid var(--border);
 }
 .error {
   color: var(--danger);
@@ -162,8 +254,8 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   grid-auto-rows: max-content;
-  gap: 12px;
-  padding: 16px;
+  gap: var(--space-3);
+  padding: var(--space-4);
   align-content: start;
 }
 
@@ -172,7 +264,7 @@ button:disabled {
 .grid-scroller {
   flex: 1;
   overflow: auto;
-  padding: 0 16px;
+  padding: 0 var(--space-4);
 }
 .grid-rows {
   position: relative;
@@ -183,7 +275,7 @@ button:disabled {
   left: 0;
   width: 100%;
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .grid-row .card {
   height: 100%;
@@ -192,33 +284,45 @@ button:disabled {
 .card {
   position: relative;
   user-select: none;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--bg);
+  background: var(--surface);
   cursor: pointer;
 }
+.card:hover {
+  border-color: var(--border-control);
+}
+
+/* Two different signals, so they can be told apart and can happen together:
+   selected tints the whole card, open draws a ring around it. */
 .card--selected {
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  background: var(--accent-surface);
 }
 .card--active {
-  border-color: var(--ink);
+  outline: 1px solid var(--border-control);
+  outline-offset: 2px;
 }
 .card__thumb {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 10;
   object-fit: cover;
-  background: var(--bg-soft);
+  background: var(--surface-sunken);
 }
 .card__body {
-  padding: 8px 10px 10px;
+  padding: var(--space-2) 10px 10px;
 }
+/* The name is what people scan for, so it's the only strong text on the card. */
 .card__name {
   margin: 0 0 2px;
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: var(--weight-strong);
+  font-size: var(--size-card);
+  color: var(--text);
+}
+.card__body .muted {
+  font-size: var(--size-sm);
 }
 /* One line each, so every card body has the same height. */
 .card__body p {
@@ -226,41 +330,88 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The checkbox sits on the thumbnail, so it needs its own edge to stay visible
+   against a light image. */
 .card__check {
   position: absolute;
-  top: 8px;
-  left: 8px;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 1;
   width: 18px;
   height: 18px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+/* Status reads three ways at once: the dot fills along the pipeline, the tint
+   deepens, and the word is always there. Colour alone never carries it. */
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+}
+/* 1. draft: nothing started */
+.dot--draft {
+  background: transparent;
+}
+/* 2. in review: half done */
+.dot--in_review {
+  background: linear-gradient(to right, currentColor 50%, transparent 50%);
+}
+/* 3. approved: done */
+.dot--approved {
+  background: currentColor;
+}
+/* 4. archived: done and filed, so it fades */
+.dot--archived {
+  background: currentColor;
+  opacity: 0.45;
 }
 
 .pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   margin-top: 6px;
-  padding: 1px 7px;
-  border-radius: 10px;
-  font-size: 12px;
-  background: var(--bg-soft);
-  border: 1px solid var(--line);
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--size-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
-.pill--approved {
-  background: #e6f4ea;
-  border-color: #b7dfc4;
+.pill--draft {
+  color: var(--text-muted);
 }
 .pill--in_review {
-  background: #fff4e0;
-  border-color: #ecd3a2;
+  background: var(--warning-surface);
+  border-color: var(--warning-border);
+}
+.pill--approved {
+  background: var(--success-surface);
+  border-color: var(--success-border);
 }
 .pill--archived {
-  color: var(--ink-soft);
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+}
+
+/* The dot lines up with the label in filter checkboxes and panel buttons too. */
+.filters label,
+.panel .row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .panel {
   width: 340px;
   flex-shrink: 0;
-  border-left: 1px solid var(--line);
+  border-left: 1px solid var(--border);
   overflow: auto;
-  padding: 12px 16px 32px;
+  padding: var(--space-3) var(--space-4) var(--space-6);
 }
 .panel__head {
   display: flex;
@@ -272,28 +423,28 @@ button:disabled {
   width: 100%;
   aspect-ratio: 16 / 10;
   object-fit: cover;
-  border-radius: 6px;
-  margin-top: 12px;
-  background: var(--bg-soft);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-3);
+  background: var(--surface-sunken);
 }
 
 .thumb-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  color: var(--ink-soft);
+  font-size: var(--size-md);
+  color: var(--text-muted);
 }
 
 .facts {
   display: grid;
   grid-template-columns: 90px 1fr;
-  gap: 2px 8px;
-  margin: 8px 0;
-  font-size: 13px;
+  gap: 2px var(--space-2);
+  margin: var(--space-2) 0;
+  font-size: var(--size-md);
 }
 .facts dt {
-  color: var(--ink-soft);
+  color: var(--text-muted);
 }
 .facts dd {
   margin: 0;
@@ -302,16 +453,16 @@ button:disabled {
 .tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-1);
   padding: 0;
-  margin: 8px 0;
+  margin: var(--space-2) 0;
   list-style: none;
 }
 .tags li {
-  font-size: 12px;
+  font-size: var(--size-sm);
   padding: 1px 7px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
 }
 
 .row {
@@ -335,109 +486,153 @@ button:disabled {
 }
 .results__updating {
   position: absolute;
-  top: 8px;
+  top: var(--space-2);
   left: 50%;
   transform: translateX(-50%);
   z-index: 1;
   margin: 0;
-  padding: 4px 12px;
-  font-size: 13px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--size-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
 }
 
 .card--skeleton {
   cursor: default;
 }
 .skeleton-line {
-  height: 12px;
-  margin: 4px 0;
-  border-radius: 4px;
-  background: var(--bg-soft);
+  height: var(--space-3);
+  margin: var(--space-1) 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
 }
 .skeleton-line--short {
   width: 60%;
 }
 
+/* Anything that takes over the result area: what happened, a quieter line of
+   detail, then the way out. */
 .state {
-  padding: 48px 16px;
+  padding: var(--space-6) var(--space-4);
+  margin: 0 auto;
+  max-width: 420px;
   text-align: center;
   flex: 1;
 }
+.state__title {
+  font-weight: var(--weight-strong);
+}
 .state button {
-  margin-top: 12px;
+  margin-top: var(--space-3);
 }
 .error-text {
   color: var(--danger);
 }
 
+/* A strip across the app: something to know, and sometimes a way to act on it.
+   Colour and the bold first words both carry the severity. */
+.banner {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--size-md);
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+}
+.banner__text {
+  flex: 1;
+  min-width: 0;
+}
+.banner--warning {
+  background: var(--warning-surface);
+  border-left-color: var(--warning-border);
+}
+.banner--danger {
+  background: var(--danger-surface);
+  border-left-color: var(--danger-border);
+}
+/* In the narrow panel the buttons sit under the text instead of beside it. */
+.banner--stacked {
+  display: block;
+  margin: var(--space-2) 0;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+}
+
 /* Result of a bulk action: one line inside the bulk bar, so the grid doesn't move. */
 .outcome {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   flex: 1 1 auto;
   min-width: 0;
   justify-content: flex-end;
 }
+.outcome {
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-3);
+}
 .outcome__text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 13px;
+  font-size: var(--size-md);
 }
 
 /* The names behind that line, only when Details is pressed. */
 .outcome-details {
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--line);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
 }
 .outcome-details p {
   margin: 2px 0;
 }
 
-.offline {
-  margin: 0;
-  padding: 8px 16px;
-  font-size: 13px;
-  background: #fff4e0;
-  border-bottom: 1px solid var(--line);
-}
-
-/* Someone else changed this asset while the panel was open. */
-.conflict {
-  margin: 8px 0;
-  padding: 8px 10px;
-  font-size: 13px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--danger);
-  border-radius: 4px;
-  background: var(--bg-soft);
-}
-
 /* Marks an asset we just changed that no longer matches the status filter. */
 .card__note {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: var(--space-2);
+  right: var(--space-2);
   max-width: calc(100% - 44px);
   padding: 1px 6px;
-  border-radius: 10px;
-  font-size: 11px;
-  color: var(--ink-soft);
-  background: var(--bg);
-  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  font-size: var(--size-xs);
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 
-.load-more-error {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 16px;
-  font-size: 13px;
-  border-top: 1px solid var(--line);
+/* Narrow: the name takes its own line, then search and sort share the next one. */
+@media (max-width: 640px) {
+  .topbar h1 {
+    flex: 1 0 100%;
+  }
+  .topbar .muted {
+    display: none;
+  }
+  /* A smaller starting width, so search and the sort box fit the row together. */
+  .search {
+    max-width: none;
+    flex-basis: 120px;
+  }
+}
+
+/* Narrow: let the bars wrap instead of hiding their buttons. */
+@media (max-width: 900px) {
+  .bulkbar {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .outcome {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    border-left: 0;
+    padding-left: 0;
+  }
 }
 
 @media (max-width: 720px) {
@@ -447,6 +642,6 @@ button:disabled {
   .panel {
     width: 100%;
     border-left: none;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid var(--border);
   }
 }

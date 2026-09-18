@@ -22,22 +22,14 @@ export function SkeletonGrid() {
   );
 }
 
+// Every state that takes over the result area has the same shape:
+// what happened, a quieter line of detail, then the way out.
 export function EmptyState({ onClear }: { onClear: () => void }) {
   return (
     <div className="state">
-      <p>Nothing matches these filters.</p>
+      <p className="state__title">Nothing matches these filters.</p>
+      <p className="muted">Try a different search, or clear what's set.</p>
       <button onClick={onClear}>Clear search and filters</button>
-    </div>
-  );
-}
-
-// Shown under the cards when a later page fails, so the pages already loaded stay.
-export function LoadMoreError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="load-more-error" role="alert">
-      <span className="error-text">Couldn't load more.</span>
-      <span className="muted">{message}</span>
-      <button onClick={onRetry}>Try again</button>
     </div>
   );
 }
@@ -45,8 +37,20 @@ export function LoadMoreError({ message, onRetry }: { message: string; onRetry: 
 export function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="state" role="alert">
-      <p className="error-text">Couldn't load assets.</p>
+      <p className="state__title">Couldn't load assets.</p>
       <p className="muted">{message}</p>
+      <button onClick={onRetry}>Try again</button>
+    </div>
+  );
+}
+
+// Shown under the cards when a later page fails, so the pages already loaded stay.
+export function LoadMoreError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="banner banner--danger" role="alert">
+      <span className="banner__text">
+        <strong>Couldn't load more.</strong> {message}
+      </span>
       <button onClick={onRetry}>Try again</button>
     </div>
   );

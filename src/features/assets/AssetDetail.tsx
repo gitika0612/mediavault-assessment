@@ -4,6 +4,7 @@ import { getAsset, updateAsset } from "@/api/client";
 import { isApiError } from "@/api/errors";
 import { withRetry } from "@/api/retry";
 import { putAssetsInCache } from "@/features/assets/cache";
+import { StatusDot } from "@/features/assets/StatusPill";
 import { Thumbnail } from "@/features/assets/Thumbnail";
 import { useAsset } from "@/features/assets/useAsset";
 import {
@@ -85,7 +86,7 @@ export function AssetDetail({ id, onClose }: Props) {
       {asset && (
         <div className="panel__body">
           {wanted && (
-            <div className="conflict" role="alert">
+            <div className="banner banner--danger banner--stacked" role="alert">
               <p>
                 This asset changed since you opened it — it's now{" "}
                 {statusLabel(asset.status)}. Apply your change again?
@@ -150,7 +151,7 @@ export function AssetDetail({ id, onClose }: Props) {
                 disabled={saving || !online || status === asset.status}
                 onClick={() => save(status, asset.version)}
               >
-                {statusLabel(status)}
+                <StatusDot status={status} /> {statusLabel(status)}
               </button>
             ))}
           </div>

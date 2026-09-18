@@ -70,9 +70,11 @@ export function AssetGrid({
     // card moves to a different row. Scroll so the card that was at the top stays at the top.
     if (previousColumns.current !== columns) {
       previousColumns.current = columns;
-      virtualizer.scrollToIndex(Math.floor(topAssetIndex.current / columns), {
-        align: "start",
-      });
+      const targetRow = Math.floor(topAssetIndex.current / columns);
+      // Row 0 starts below the grid's top padding, so scroll to the very top
+      // instead of to the row, or that padding is scrolled away.
+      if (targetRow === 0) virtualizer.scrollToOffset(0);
+      else virtualizer.scrollToIndex(targetRow, { align: "start" });
     }
   }, [rowHeight, columns, virtualizer]);
 

@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { Thumbnail } from "@/features/assets/Thumbnail";
-import { formatBytes, formatDate, statusLabel } from "@/lib/format";
+import { StatusPill } from "@/features/assets/StatusPill";
+import { formatBytes, formatDate } from "@/lib/format";
 import type { Asset } from "@/lib/types";
 
 interface Props {
@@ -47,9 +48,7 @@ export const AssetCard = memo(function AssetCard({
           {asset.kind} · {formatBytes(asset.sizeBytes)} ·{" "}
           {formatDate(asset.updatedAt)}
         </p>
-        <span className={`pill pill--${asset.status}`}>
-          {statusLabel(asset.status)}
-        </span>
+        <StatusPill status={asset.status} />
       </div>
       <input
         type="checkbox"

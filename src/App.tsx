@@ -14,6 +14,7 @@ import {
   restoreStatusInCache,
 } from "@/features/assets/cache";
 import { AssetGrid } from "@/features/assets/AssetGrid";
+import { FilterMenu, summarize } from "@/features/assets/FilterMenu";
 import {
   KINDS,
   SORTS,
@@ -27,9 +28,11 @@ import {
   LoadMoreError,
   SkeletonGrid,
 } from "@/features/assets/GridStates";
+import { StatusDot } from "@/features/assets/StatusPill";
 import { useAssets } from "@/features/assets/useAssets";
 import { kindLabel, statusLabel } from "@/lib/format";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import type { AssetStatus } from "@/lib/types";
 
@@ -40,6 +43,8 @@ function toggle<T>(list: T[], value: T, checked: boolean): T[] {
 export function App() {
   const queryClient = useQueryClient();
   const online = useOnlineStatus();
+  // Same breakpoint as the narrow rules in styles.css.
+  const isNarrow = useMediaQuery("(max-width: 640px)");
   const [filters, updateFilters] = useFilters();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -48,6 +53,8 @@ export function App() {
   // Assets we just changed that no longer match the status filter, marked on the card.
   const [outOfFilter, setOutOfFilter] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState(false);
+  // The status chosen in the bulk bar, applied only when Apply is pressed.
+  const [bulkStatus, setBulkStatus] = useState<AssetStatus | "">("");
 
   // Search once typing pauses, not on every keystroke.
   const debouncedQ = useDebouncedValue(filters.q, 400);
@@ -188,6 +195,39 @@ export function App() {
     setApplying(false);
   }
 
+  // The same boxes go inline on a wide screen and inside a dropdown on a narrow one.
+  const statusBoxes = STATUSES.map((s) => (
+    <label key={s}>
+      <input
+        type="checkbox"
+        checked={filters.status.includes(s)}
+        onChange={(e) =>
+          updateFilters(
+            { status: toggle(filters.status, s, e.target.checked) },
+            "push"
+          )
+        }
+      />
+      <StatusDot status={s} /> {statusLabel(s)}
+    </label>
+  ));
+
+  const kindBoxes = KINDS.map((k) => (
+    <label key={k}>
+      <input
+        type="checkbox"
+        checked={filters.kind.includes(k)}
+        onChange={(e) =>
+          updateFilters(
+            { kind: toggle(filters.kind, k, e.target.checked) },
+            "push"
+          )
+        }
+      />
+      {kindLabel(k)}
+    </label>
+  ));
+
   return (
     <div className="app">
       <header className="topbar">
@@ -216,38 +256,35 @@ export function App() {
       </header>
 
       <div className="filters">
-        <span className="muted">Status</span>
-        {STATUSES.map((s) => (
-          <label key={s}>
-            <input
-              type="checkbox"
-              checked={filters.status.includes(s)}
-              onChange={(e) =>
-                updateFilters(
-                  { status: toggle(filters.status, s, e.target.checked) },
-                  "push"
-                )
-              }
-            />
-            {statusLabel(s)}
-          </label>
-        ))}
-        <span className="muted">Kind</span>
-        {KINDS.map((k) => (
-          <label key={k}>
-            <input
-              type="checkbox"
-              checked={filters.kind.includes(k)}
-              onChange={(e) =>
-                updateFilters(
-                  { kind: toggle(filters.kind, k, e.target.checked) },
-                  "push"
-                )
-              }
-            />
-            {kindLabel(k)}
-          </label>
-        ))}
+        {isNarrow ? (
+          <>
+            <FilterMenu
+              label="Status"
+              summary={summarize(filters.status, statusLabel)}
+            >
+              {statusBoxes}
+            </FilterMenu>
+            <FilterMenu
+              label="Kind"
+              summary={summarize(filters.kind, kindLabel)}
+            >
+              {kindBoxes}
+            </FilterMenu>
+          </>
+        ) : (
+          <>
+            {/* Each group wraps as a unit, so "Status" never ends up away from its boxes. */}
+            <div className="filter-group">
+              <span className="muted">Status</span>
+              {statusBoxes}
+            </div>
+            <div className="filter-group">
+              <span className="muted">Kind</span>
+              {kindBoxes}
+            </div>
+          </>
+        )}
+
         {hasData && (
           <span className="muted">
             {items.length.toLocaleString()} of {total.toLocaleString()} loaded
@@ -256,14 +293,17 @@ export function App() {
       </div>
 
       {!online && (
-        <p className="offline" role="status">
-          You're offline. Nothing can load or save until you reconnect.
+        <p className="banner banner--warning" role="status">
+          <span className="banner__text">
+            <strong>You're offline.</strong> Nothing can load or save until you
+            reconnect.
+          </span>
         </p>
       )}
 
       {/* Always shown, so ticking the first card doesn't push the grid down. */}
       <div className="bulkbar">
-        <span className={selectedIds.size === 0 ? "muted" : undefined}>
+        <span className={selectedIds.size === 0 ? "muted" : "bulkbar__count"}>
           {selectedIds.size === 0
             ? "No assets selected"
             : `${selectedIds.size} selected`}
@@ -274,15 +314,27 @@ export function App() {
         >
           Select all loaded
         </button>
-        {STATUSES.map((s) => (
-          <button
-            key={s}
-            disabled={selectedIds.size === 0 || applying || !online}
-            onClick={() => applyBulkStatus([...selectedIds], s)}
-          >
-            Set {statusLabel(s).toLowerCase()}
-          </button>
-        ))}
+        {/* One dropdown instead of four buttons: the bar stays short, and picking
+            a status is a choice followed by a deliberate Apply. */}
+        <select
+          aria-label="Status to apply"
+          value={bulkStatus}
+          disabled={selectedIds.size === 0 || applying || !online}
+          onChange={(e) => setBulkStatus(e.target.value as AssetStatus | "")}
+        >
+          <option value="">Set status…</option>
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {statusLabel(s)}
+            </option>
+          ))}
+        </select>
+        <button
+          disabled={!bulkStatus || selectedIds.size === 0 || applying || !online}
+          onClick={() => bulkStatus && applyBulkStatus([...selectedIds], bulkStatus)}
+        >
+          Apply
+        </button>
         {applying && <span className="muted">Applying…</span>}
         <button
           disabled={selectedIds.size === 0}

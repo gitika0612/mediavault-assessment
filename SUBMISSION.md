@@ -266,12 +266,34 @@ The baseline hid its own bottleneck: without pagination it only ever showed 24 c
 
 ## Interface decisions
 
-Three or four sentences: what you were optimising for, and the decisions that
-follow from it. Then briefly:
+I optimised for scanning rather than for first impression: a reviewer spends the
+day moving through hundreds of near-identical cards, so the interface's job is to
+make name, status and selection readable at a glance and keep everything else
+quiet. One accent colour is reserved for selection and focus, a single grey ramp
+carries all the structure, and the remaining colours only appear as outcomes — in
+review, approved, failed — so colour still means something when you see it. Every
+state the app can be in uses the same shape: what happened, a quieter line of
+detail, then the way out. I spent the time on consistency and on the states rather
+than on decoration, because that's what stops an app feeling unfinished on the
+tenth screen.
 
-- **Visual system.** Your colour, spacing and type decisions, and where they live.
-- **Status treatment.** How the four statuses read as a progression, and how they
-  stay distinguishable without relying on colour.
+- **Visual system.** Everything lives in one `:root` block at the top of
+  `src/styles.css` — about thirty tokens, and no file sets a colour or font size
+  inline. Two surfaces and **three** line weights: `--border` for card edges and
+  dividers (decorative), `--border-strong` for quiet emphasis, `--border-control`
+  for anything you can click. Spacing is a 4px step scale (`--space-1…6`), type is
+  six sizes and two weights (`--size-xs…lg`, `--weight-normal/strong`), and there
+  are three radii. The deliberate decision is the three line weights: a card edge
+  and a button edge are different jobs, and only the second one has a contrast
+  requirement to meet.
+- **Status treatment.** The four statuses are a pipeline, so they're drawn as one
+  dot filling up: draft is an empty ring, in review is half filled, approved is
+  solid, archived is solid but faded back. Colour follows the same order — grey,
+  amber, green, greyed out — but the fill carries the meaning on its own, so the
+  four stay apart in greyscale or for anyone who can't separate red from green.
+  The same dot appears everywhere the status does: on the card pill, in the filter
+  checkboxes and on the detail panel's status buttons, always next to its label.
+  Nothing in the app is colour-only or icon-only.
 - **States.** What you did with loading, empty, error, offline and partial
   failure.
   - **Loading (first load):** grey skeleton cards in the real grid layout, so nothing jumps when results arrive.
@@ -284,14 +306,34 @@ follow from it. Then briefly:
   - **Offline:** a banner at the top, and "Waiting for a connection…" over the dimmed grid; actions that would fail are disabled.
   - **Partial failure (bulk):** one line in the bulk bar — "408 of 500 approved · 62 on legal hold · 30 changed at the same time" — with Retry for the ones that can succeed, and Details for the names.
   - **A crash:** the grid or the panel is replaced by "… stopped working. The rest of the page still works." with Try again; the rest of the page keeps working.
-- **Contrast.** What you checked against, and with what.
+- **Contrast.** Measured with the WCAG formula against the actual token values,
+  not estimated by eye. Body text is 16.9:1, muted text 5.7:1 on white and 5.3:1
+  on the sunken filter bar, the accent 5.6:1, error text 6.9:1 on white and 6.1:1
+  on its own tint — all clear of AA's 4.5:1. The failure it caught was control
+  borders: the decorative `--border` at 1.37:1 was also being used on buttons and
+  inputs, well under the 3:1 non-text rule, so `--border-control` (#868e9c —
+  3.30:1 on white, 3.05:1 on the sunken bar) was added for controls and the light
+  border kept for edges that carry no information.
 - **Copy.** Any user-facing message you rewrote and why.
   - Every error passes through one function (`userMessage.ts`), so no status codes or server phrasing reach the screen. "429: Too many requests in the last 10 seconds." became "MediaVault is busy right now. Wait a moment and try again."
   - Each message says what to do next: "Search is briefly unavailable. Try again in a moment.", "That change didn't save. Try again.", "On legal hold — this asset can't be archived.", "Names need at least 3 characters."
   - Mistakes the app makes (`stale_cursor`, `too_many_ids`, `bad_cursor`, `bad_request`) never show their code: the user reads "Something went wrong on our side. Try reloading the page." and the code goes to the console, for me rather than them.
   - Counts say "loaded", not "shown": with virtualization only a few cards exist at a time, so "5,050 of 12,400 loaded" is the honest wording.
 
-Screenshots in the repo are welcome — link them here.
+**Screenshots**
+
+- [grid.png](docs/screenshots/grid.png) — a search with two status filters on and
+  three cards selected: name, status pill and selection state are all readable
+  while scanning.
+- [bulk-result.png](docs/screenshots/bulk-result.png) — 50 assets sent to
+  Archived: "24 of 50 archived · 23 on legal hold · 3 changed at the same time".
+  Retry covers only the 3 that can succeed; the 23 on legal hold never can.
+- [bulk-result-2.png](docs/screenshots/bulk-result-2.png) — the same result with
+  Details open, naming every asset under each reason.
+- [color-blind.png](docs/screenshots/color-blind.png) — the first view under
+  Chrome's Achromatopsia emulation. With every colour gone, the dots still
+  separate In review (half filled) from Approved (solid), and the ticked
+  checkboxes still read as selected.
 
 ---
 
